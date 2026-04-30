@@ -36,7 +36,7 @@ const Main = () => {
         if (userData) {
             navigate("/dashboard");
         }
-    }, [userData]);
+    }, [navigate, userData]);
 
     return (
         <>
