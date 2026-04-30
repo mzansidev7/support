@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { supabaseClient } from "../../supabaseClient/supabase.config.js";
 import mainLogo from "../../Asserts/images/mainLogo.png";
@@ -122,6 +122,11 @@ const LoginPage = () => {
                     </form>
 
                     <p className="footerText">Forgot password? Reset it</p>
+                    {success && (
+                        <div className="messageBox">
+                            <h4 className="success">{message}</h4>
+                        </div>
+                    )}
 
                     <div className="messageBox">
                         <h4 style={{ color: "red" }}>Testing emails:</h4>
