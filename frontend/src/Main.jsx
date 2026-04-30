@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import React from "react";
+import { Route, Routes } from "react-router-dom";
 import { useDisclosure } from "@chakra-ui/react";
 import LoginPage from "./components/login/LoginPage";
 import Dashboard from "./components/dashboard/Dashboard";
@@ -14,7 +14,7 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 
 const Main = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
-    const [userData, setUserData] = useState(null);
+    // const [userData, setUserData] = useState(null);
 
     // const navigate = useNavigate();
 
@@ -28,16 +28,16 @@ const Main = () => {
     //     }
     // };
 
-// useEffect(() => {
-//     const user = getUserFromLocalStorage();
-//     setUserData(user);
-// }, []);
+    // useEffect(() => {
+    //     const user = getUserFromLocalStorage();
+    //     setUserData(user);
+    // }, []);
 
-// useEffect(() => {
-//     if (userData) {
-//         navigate("/dashboard");
-//     }
-// }, [userData, navigate]);
+    // useEffect(() => {
+    //     if (userData) {
+    //         navigate("/dashboard");
+    //     }
+    // }, [userData, navigate]);
 
     return (
         <>
