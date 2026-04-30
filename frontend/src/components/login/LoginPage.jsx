@@ -25,7 +25,6 @@ const LoginPage = () => {
                 .select("*")
                 .eq("email", email)
                 .eq("password", password)
-
                 .single();
 
             if (error || !data) {
@@ -127,11 +126,12 @@ const LoginPage = () => {
                             <h4 className="success">{message}</h4>
                         </div>
                     )}
+                    {message && message}
 
                     <div className="messageBox">
                         <h4 style={{ color: "red" }}>Testing emails:</h4>
 
-                        <h4 className="success">admim@test.com</h4>
+                        <h4 className="success">admin@test.com</h4>
                         <h4 className="success">agent@test.com</h4>
                         <h4 className="success">dispatch@test.com</h4>
                     </div>
