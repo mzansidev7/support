@@ -8,7 +8,8 @@ import {
     DrawerBody,
     DrawerOverlay,
     DrawerContent,
-    DrawerCloseButton
+    DrawerCloseButton,
+    Spacer
 } from "@chakra-ui/react";
 
 import { useNavigate, useLocation } from "react-router-dom";
@@ -28,8 +29,16 @@ const Sidebar = ({ isOpen, onOpen, onClose }) => {
         { label: "Profile", path: "/profile" }
     ];
 
+    const handleLogout = () => {
+        // Optional: clear auth storage here
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+
+        navigate("/");
+    };
+
     const NavItems = () => (
-        <VStack align="start" spacing={3} w="100%">
+        <VStack align="start" spacing={3} w="100%" h="100%">
             {items.map(item => (
                 <Button
                     key={item.path}
@@ -49,6 +58,17 @@ const Sidebar = ({ isOpen, onOpen, onClose }) => {
                     {item.label}
                 </Button>
             ))}
+
+            <Spacer />
+
+            <Button
+                w="100%"
+                colorScheme="red"
+                variant="solid"
+                onClick={handleLogout}
+            >
+                Logout
+            </Button>
         </VStack>
     );
 
