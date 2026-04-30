@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Route, Routes, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from "react";
+import { Route, Routes, useNavigate } from "react-router-dom";
 import { useDisclosure } from "@chakra-ui/react";
 import LoginPage from "./components/login/LoginPage";
 import Dashboard from "./components/dashboard/Dashboard";
@@ -31,11 +31,13 @@ const Main = () => {
     useEffect(() => {
         const user = getUserFromLocalStorage();
         setUserData(user);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
         if (userData) {
             navigate("/dashboard");
+            // eslint-disable-next-line react-hooks/exhaustive-deps
         }
     }, [userData]);
 
