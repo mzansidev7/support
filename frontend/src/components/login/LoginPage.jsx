@@ -1,101 +1,135 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // ✅ ADD
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from "lucide-react";
-import { supabase } from "../../supabaseClient/supabase.config.js";
+import { supabaseClient } from "../../supabaseClient/supabase.config.js";
 import mainLogo from "../../Asserts/images/mainLogo.png";
 import "./LoginPage.css";
 
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate(); // ✅ ADD
+  const [message, setMessage] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const navigate = useNavigate();
 
-  const email = e.target.email.value;
-  const password = e.target.password.value;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage("");
+try {
+      const { data, error } = await supabaseClient
+        .from("support_user")
+        .select("*")
+        .eq("email", email)
+        .eq("password", password)
+        
+        .single();
 
-  // 1. check user in support_user table
-  const { data, error } = await supabase
-    .from("support_user")
-    .select("*")
-    .eq("email", email)
-    .eq("password", password)
-    .single();
+      if (error || !data) {
+        setSuccess(false);
+        setMessage(error);
+        setLoading(false);
+         setTimeout(() => {
+setMessage("")     
+}, 10000);
+        return;
+      }
 
-console.log(data);
-  if (error || !data) {
-    alert("Invalid email or password");
-    return;
-  }
+      if (!data.is_active) {
+        setSuccess(false);
+        setMessage("Account is disabled");
+        setLoading(false);
+        return;
+      }
 
-  if (!data.is_active) {
-    alert("Account is disabled");
-    return;
-  }
+      // store session
+      localStorage.setItem("user", JSON.stringify(data));
 
-  // 2. store user session
-  localStorage.setItem("user", JSON.stringify(data));
+      setSuccess(true);
+      setMessage("Login successful!");
 
-navigate("/dashboard");
-  // // 3. role-based routing
-  // if (data.role === "admin") navigate("/admin");
-  // if (data.role === "support_agent") navigate("/dashboard");
-  // if (data.role === "dispatcher") navigate("/map");
-};
+      // navigate after short delay (optional UX)
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 800);
+
+    } catch (err) {
+      setSuccess(false);
+      setMessage("Something went wrong. Try again.");
+    }
+    setLoading(false);
+  };
 
   return (
     <div className="container">
       <div className="loginCard">
-
         <div className="left">
           <h1>Welcome Back</h1>
           <p>Sign in to access support dashboard</p>
         </div>
 
         <div className="right">
-
           <div className="main_logo">
             <img src={mainLogo} alt="Logo" />
           </div>
+<div style={{backgroundColor: "white"}}>
+<h1 style={{color: "black"}}>
+        {JSON.stringify(email)}
+        
+        {JSON.stringify(password)}
+        
 
+</h1>
+
+</div>
           <h2>Login</h2>
 
-          {/* ✅ attach submit handler */}
           <form onSubmit={handleSubmit}>
-            
-            <div className="inputGroup">
-              <label>Email</label>
-              <input type="email" placeholder="Enter your email" />
+            <input
+              name="email"
+              type="email"
+              placeholder="Enter your email"
+              required
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <div style={{ position: "relative", marginTop: "15px", }}>
+              <input
+                name="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter your password"
+                required
+                              onChange={(e) => setPassword(e.target.value)}
+
+              />
+              <span
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  cursor: "pointer",
+                }}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </span>
             </div>
 
-            <div className="inputGroup">
-              <label>Password</label>
-
-              <div className="passwordBox">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <button className="loginBtn" type="submit">
-              Sign In
+            <button className={loading ? "loginLoading" :"loginBtn"} type="submit" disabled={loading}>
+              {loading ? "Signing in..." : "Sign In"}
             </button>
-
           </form>
 
           <p className="footerText">Forgot password? Reset it</p>
-        </div>
 
+  {JSON.stringify(message)}
+
+
+        </div>
       </div>
     </div>
   );
