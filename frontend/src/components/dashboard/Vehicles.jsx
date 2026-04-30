@@ -9,7 +9,6 @@ import {
   HStack,
   VStack,
   Badge,
-  Avatar,
   SimpleGrid,
   Card,
   CardBody,

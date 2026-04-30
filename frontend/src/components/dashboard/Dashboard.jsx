@@ -4,7 +4,6 @@ import {
   Heading,
   Text,
   Grid,
-  Flex,
   Badge,
   Table,
   Thead,
@@ -12,23 +11,14 @@ import {
   Tr,
   Th,
   Td,
-  Avatar,
   VStack,
   HStack,
-  Icon,
   SimpleGrid,
   Stat,
   StatLabel,
   StatNumber,
   StatHelpText,
 } from "@chakra-ui/react";
-
-import {
-  FiUsers,
-  FiTruck,
-  FiAlertCircle,
-  FiMap,
-} from "react-icons/fi";
 
 import {
   BarChart,
