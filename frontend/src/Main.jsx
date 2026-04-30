@@ -29,18 +29,18 @@ const Main = () => {
     };
 
     useEffect(() => {
-        setUserData(getUserFromLocalStorage());
+        const user = getUserFromLocalStorage();
+        setUserData(user);
     }, []);
 
     useEffect(() => {
         if (userData) {
             navigate("/dashboard");
         }
-    }, [navigate, userData]);
+    }, [userData]);
 
     return (
         <>
-          
             <Routes>
                 <Route path="/" element={<LoginPage />} />
 
