@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from "lucide-react";
 import { supabaseClient } from "../../supabaseClient/supabase.config.js";
 import mainLogo from "../../Asserts/images/mainLogo.png";
