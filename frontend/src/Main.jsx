@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Route, Routes, useNavigate } from "react-router-dom";
+import React, { useState } from 'react';
+import { Route, Routes } from 'react-router-dom';
 import { useDisclosure } from "@chakra-ui/react";
 import LoginPage from "./components/login/LoginPage";
 import Dashboard from "./components/dashboard/Dashboard";
@@ -16,30 +16,28 @@ const Main = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
     const [userData, setUserData] = useState(null);
 
-    const navigate = useNavigate();
+    // const navigate = useNavigate();
 
-    const getUserFromLocalStorage = () => {
-        try {
-            const userStr = localStorage.getItem("user");
-            return userStr ? JSON.parse(userStr) : null;
-        } catch (error) {
-            console.error("Error retrieving user:", error);
-            return null;
-        }
-    };
+    // const getUserFromLocalStorage = () => {
+    //     try {
+    //         const userStr = localStorage.getItem("user");
+    //         return userStr ? JSON.parse(userStr) : null;
+    //     } catch (error) {
+    //         console.error("Error retrieving user:", error);
+    //         return null;
+    //     }
+    // };
 
-    useEffect(() => {
-        const user = getUserFromLocalStorage();
-        setUserData(user);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+// useEffect(() => {
+//     const user = getUserFromLocalStorage();
+//     setUserData(user);
+// }, []);
 
-    useEffect(() => {
-        if (userData) {
-            navigate("/dashboard");
-            // eslint-disable-next-line react-hooks/exhaustive-deps
-        }
-    }, [userData]);
+// useEffect(() => {
+//     if (userData) {
+//         navigate("/dashboard");
+//     }
+// }, [userData, navigate]);
 
     return (
         <>
