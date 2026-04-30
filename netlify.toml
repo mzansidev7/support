@@ -1,9 +1,8 @@
 [build]
-  base = "frontend"        # your React app folder
-  publish = "frontend/build"
+  base = "frontend"
+  publish = "build"
   command = "npm run build"
 
-# Fix React routing (VERY IMPORTANT)
 [[redirects]]
   from = "/*"
   to = "/index.html"
