@@ -40,9 +40,7 @@ const Main = () => {
 
     return (
         <>
-            // <div style={{ backgroundColor: "red" }}>
-            //     {JSON.stringify(userData)}
-            // </div>
+          
             <Routes>
                 <Route path="/" element={<LoginPage />} />
 
