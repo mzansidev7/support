@@ -121,12 +121,17 @@ const LoginPage = () => {
                     </form>
 
                     <p className="footerText">Forgot password? Reset it</p>
-                    {success && (
+                    {success ? (
                         <div className="messageBox">
                             <h4 className="success">{message}</h4>
                         </div>
+                    ) : (
+                        <div className="messageBox">
+                            <h4 style={{ textAlign: "centre", color: "red" }}>
+                                Incorrect email or password
+                            </h4>
+                        </div>
                     )}
-                    {message && message}
 
                     <div className="messageBox">
                         <h4 style={{ color: "red" }}>Testing emails:</h4>
