@@ -1,27 +1,26 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Box,
-  Flex,
-  Grid,
-  Text,
   Heading,
+  Text,
+  Grid,
+  Flex,
+  Badge,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td,
+  Avatar,
+  VStack,
+  HStack,
+  Icon,
+  SimpleGrid,
   Stat,
   StatLabel,
   StatNumber,
   StatHelpText,
-  Button,
-  VStack,
-  HStack,
-  Badge,
-  Icon,
-  Avatar,
-  Input,
-  Drawer,
-  DrawerBody,
-  DrawerOverlay,
-  DrawerContent,
-  DrawerCloseButton,
-  useDisclosure,
 } from "@chakra-ui/react";
 
 import {
@@ -29,177 +28,205 @@ import {
   FiTruck,
   FiAlertCircle,
   FiMap,
-  FiMenu,
-  FiBell,
 } from "react-icons/fi";
 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+} from "recharts";
+import LiveMap from "./LiveMap";
+
+/* ================= MOCK DATA ================= */
+
+const barData = [
+  { name: "Drivers", value: 24 },
+  { name: "Trips", value: 8 },
+  { name: "Vehicles", value: 12 },
+  { name: "Alerts", value: 3 },
+];
+
+const lineData = [
+  { day: "Mon", trips: 5 },
+  { day: "Tue", trips: 7 },
+  { day: "Wed", trips: 6 },
+  { day: "Thu", trips: 9 },
+  { day: "Fri", trips: 12 },
+];
+
+const trips = [
+  { id: "TR-101", driver: "John", status: "On Time", eta: "08:10" },
+  { id: "TR-102", driver: "Sipho", status: "Delayed", eta: "08:25" },
+  { id: "TR-103", driver: "Thabo", status: "On Time", eta: "08:05" },
+];
+
+const incidents = [
+  "🚨 Route 4 delay reported",
+  "⚠️ Vehicle VH-11 low fuel",
+  "🚨 Driver late pickup - TR-102",
+];
+
+const vehicleHealth = [
+  { name: "VH-11", status: "Warning" },
+  { name: "VH-12", status: "Healthy" },
+  { name: "VH-13", status: "Critical" },
+];
+
+const actions = [
+  "You suspended Driver John",
+  "You resolved Request #202",
+  "You updated Route 4 schedule",
+];
+
+/* ================= DASHBOARD ================= */
+
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const { isOpen, onOpen, onClose } = useDisclosure();
-
   return (
-    <Flex minH="100vh" bg="gray.100">
+    <Box p={6} bg="gray.50" minH="100vh">
 
-      {/* ================= DESKTOP SIDEBAR ================= */}
-      <Box
-        w="260px"
-        bg="white"
-        p={6}
-        display={{ base: "none", md: "block" }}
-        boxShadow="md"
-      >
-        <Heading size="md" mb={8}>
-          🚍 Track My Kid
-        </Heading>
+      {/* ================= KPI STRIP ================= */}
+      <Grid templateColumns="repeat(4, 1fr)" gap={4} mb={6}>
+        <KPI title="On-Time Rate" value="92%" />
+        <KPI title="Active Routes" value="14" />
+        <KPI title="Delayed Trips" value="3" />
+        <KPI title="Incidents" value="1" />
+      </Grid>
 
-        <VStack align="start" spacing={3}>
-          <NavItem label="Dashboard" active={activeTab === "dashboard"} onClick={() => setActiveTab("dashboard")} />
-          <NavItem label="Drivers" active={activeTab === "drivers"} onClick={() => setActiveTab("drivers")} />
-          <NavItem label="Trips" active={activeTab === "trips"} onClick={() => setActiveTab("trips")} />
-          <NavItem label="Vehicles" active={activeTab === "vehicles"} onClick={() => setActiveTab("vehicles")} />
-          <NavItem label="Requests" active={activeTab === "requests"} onClick={() => setActiveTab("requests")} />
-          <NavItem label="Settings" active={activeTab === "settings"} onClick={() => setActiveTab("settings")} />
+      {/* ================= INCIDENT FEED ================= */}
+      <Box bg="white" p={5} borderRadius="xl" mb={6}>
+        <Heading size="sm" mb={3}>Live Incidents</Heading>
+        <VStack align="start">
+          {incidents.map((i, idx) => (
+            <Text key={idx}>{i}</Text>
+          ))}
         </VStack>
       </Box>
 
-      {/* ================= MAIN AREA ================= */}
-      <Box flex="1">
+      {/* ================= ACTIVE TRIPS ================= */}
+      <Box bg="white" p={5} borderRadius="xl" mb={6}>
+        <Heading size="sm" mb={3}>Active Trips</Heading>
 
-        {/* ================= TOP NAVBAR ================= */}
-        <Flex
-          bg="white"
-          px={6}
-          py={4}
-          justify="space-between"
-          align="center"
-          boxShadow="sm"
-        >
-          <HStack spacing={3}>
-            {/* Mobile menu button */}
-            <Icon
-              as={FiMenu}
-              boxSize={6}
-              cursor="pointer"
-              onClick={onOpen}
-            />
+        <Table size="sm">
+          <Thead>
+            <Tr>
+              <Th>Trip</Th>
+              <Th>Driver</Th>
+              <Th>Status</Th>
+              <Th>ETA</Th>
+            </Tr>
+          </Thead>
 
-            <Heading size="md">
-              {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
-            </Heading>
-          </HStack>
-
-          <HStack spacing={4}>
-            <Input placeholder="Search..." size="sm" w="180px" />
-            <Icon as={FiBell} boxSize={5} />
-            <Badge colorScheme="green">Online</Badge>
-            <Avatar size="sm" name="Admin" />
-          </HStack>
-        </Flex>
-
-        {/* ================= CONTENT ================= */}
-        <Box p={6}>
-
-          {/* Header */}
-          <Box mb={6}>
-            <Heading size="lg">Welcome back 👋</Heading>
-            <Text color="gray.600">
-              Monitor your school transport system in real time
-            </Text>
-          </Box>
-
-          {/* Stats */}
-          <Grid templateColumns={{ base: "1fr", md: "repeat(4, 1fr)" }} gap={6}>
-
-            <StatCard title="Drivers" value="24" help="+2 this week" icon={FiUsers} />
-            <StatCard title="Active Trips" value="8" help="Running now" icon={FiMap} />
-            <StatCard title="Vehicles" value="12" help="Tracked" icon={FiTruck} />
-            <StatCard title="Alerts" value="3" help="Needs attention" icon={FiAlertCircle} />
-
-          </Grid>
-
-          {/* Activity */}
-          <Box mt={10}>
-            <Heading size="md" mb={4}>
-              Recent Activity
-            </Heading>
-
-            <VStack spacing={4} align="stretch">
-              <ActivityItem text="Driver John started Trip #TR-102" />
-              <ActivityItem text="Vehicle VH-11 arrived at School A" />
-              <ActivityItem text="Delay reported on Route 4" />
-            </VStack>
-          </Box>
-
-        </Box>
+          <Tbody>
+            {trips.map((t) => (
+              <Tr key={t.id}>
+                <Td>{t.id}</Td>
+                <Td>{t.driver}</Td>
+                <Td>
+                  <Badge
+                    colorScheme={t.status === "On Time" ? "green" : "red"}
+                  >
+                    {t.status}
+                  </Badge>
+                </Td>
+                <Td>{t.eta}</Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
       </Box>
 
-      {/* ================= MOBILE SIDEBAR (DRAWER) ================= */}
-      <Drawer isOpen={isOpen} placement="left" onClose={onClose}>
-        <DrawerOverlay />
-        <DrawerContent>
-          <DrawerCloseButton />
+      {/* ================= VEHICLE HEALTH ================= */}
+      <Box bg="white" p={5} borderRadius="xl" mb={6}>
+        <Heading size="sm" mb={3}>Vehicle Health</Heading>
 
-          <DrawerBody mt={10}>
-            <VStack align="start" spacing={4}>
-              <NavItem label="Dashboard" onClick={onClose} />
-              <NavItem label="Drivers" onClick={onClose} />
-              <NavItem label="Trips" onClick={onClose} />
-              <NavItem label="Vehicles" onClick={onClose} />
-              <NavItem label="Requests" onClick={onClose} />
-              <NavItem label="Settings" onClick={onClose} />
-            </VStack>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
+        <HStack spacing={4}>
+          {vehicleHealth.map((v) => (
+            <Badge
+              key={v.name}
+              colorScheme={
+                v.status === "Healthy"
+                  ? "green"
+                  : v.status === "Warning"
+                  ? "yellow"
+                  : "red"
+              }
+              p={2}
+            >
+              {v.name} - {v.status}
+            </Badge>
+          ))}
+        </HStack>
+      </Box>
 
-    </Flex>
+      {/* ================= CHARTS ================= */}
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} mb={6}>
+
+        {/* BAR */}
+        <Box bg="white" p={5} borderRadius="xl">
+          <Heading size="sm" mb={4}>System Overview</Heading>
+
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={barData}>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" fill="#3182CE" />
+            </BarChart>
+          </ResponsiveContainer>
+        </Box>
+
+        {/* LINE */}
+        <Box bg="white" p={5} borderRadius="xl">
+          <Heading size="sm" mb={4}>Weekly Trips</Heading>
+
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={lineData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" />
+              <YAxis />
+              <Tooltip />
+              <Line
+                type="monotone"
+                dataKey="trips"
+                stroke="#38A169"
+                strokeWidth={3}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </Box>
+
+      </SimpleGrid>
+
+      {/* ================= RECENT ACTIONS ================= */}
+      <Box bg="white" p={5} borderRadius="xl">
+        <Heading size="sm" mb={3}>Recent Support Actions</Heading>
+        <VStack align="start">
+          {actions.map((a, i) => (
+            <Text key={i}>{a}</Text>
+          ))}
+        </VStack>
+      </Box>
+<LiveMap />
+    </Box>
   );
 };
 
 export default Dashboard;
 
-/* ================= NAV ITEM ================= */
-const NavItem = ({ label, active, onClick }) => (
-  <Button
-    w="100%"
-    justifyContent="flex-start"
-    variant={active ? "solid" : "ghost"}
-    colorScheme={active ? "blue" : "gray"}
-    onClick={onClick}
-  >
-    {label}
-  </Button>
-);
+/* ================= KPI ================= */
 
-/* ================= STAT CARD ================= */
-const StatCard = ({ title, value, help, icon }) => (
-  <Box
-    p={5}
-    bg="white"
-    borderRadius="xl"
-    boxShadow="sm"
-    _hover={{ boxShadow: "md", transform: "translateY(-2px)" }}
-    transition="0.2s"
-  >
-    <Flex justify="space-between" align="center">
-      <Box>
-        <Stat>
-          <StatLabel>{title}</StatLabel>
-          <StatNumber>{value}</StatNumber>
-          <StatHelpText>{help}</StatHelpText>
-        </Stat>
-      </Box>
-
-      <Box p={3} bg="blue.50" borderRadius="full">
-        <Icon as={icon} boxSize={5} color="blue.500" />
-      </Box>
-    </Flex>
-  </Box>
-);
-
-/* ================= ACTIVITY ITEM ================= */
-const ActivityItem = ({ text }) => (
-  <Box p={4} bg="white" borderRadius="lg" boxShadow="sm">
-    <Text>{text}</Text>
+const KPI = ({ title, value }) => (
+  <Box bg="white" p={4} borderRadius="xl">
+    <Stat>
+      <StatLabel>{title}</StatLabel>
+      <StatNumber>{value}</StatNumber>
+      <StatHelpText>Live data</StatHelpText>
+    </Stat>
   </Box>
 );

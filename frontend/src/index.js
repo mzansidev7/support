@@ -5,6 +5,7 @@ import { ChakraProvider } from "@chakra-ui/react"
 import reportWebVitals from './reportWebVitals';
 import App from './App';
 import './index.css';
+import "leaflet/dist/leaflet.css";
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
