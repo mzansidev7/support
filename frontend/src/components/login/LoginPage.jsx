@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from "react-router-dom"; // ✅ ADD
+import { useNavigate } from 'react-router-dom'; // ✅ ADD
 import { Eye, EyeOff } from "lucide-react";
+import { supabase } from "../../supabaseClient/supabase.config.js";
 import mainLogo from "../../Asserts/images/mainLogo.png";
 import "./LoginPage.css";
 
@@ -8,14 +9,40 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate(); // ✅ ADD
 
-  const handleSubmit = (e) => {
-    e.preventDefault(); // ✅ stop page reload
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    // 👉 later: validate login / call API
-    // for now just redirect
+  const email = e.target.email.value;
+  const password = e.target.password.value;
 
-    navigate("/dashboard"); // ✅ REDIRECT
-  };
+  // 1. check user in support_user table
+  const { data, error } = await supabase
+    .from("support_user")
+    .select("*")
+    .eq("email", email)
+    .eq("password", password)
+    .single();
+
+console.log(data);
+  if (error || !data) {
+    alert("Invalid email or password");
+    return;
+  }
+
+  if (!data.is_active) {
+    alert("Account is disabled");
+    return;
+  }
+
+  // 2. store user session
+  localStorage.setItem("user", JSON.stringify(data));
+
+navigate("/dashboard");
+  // // 3. role-based routing
+  // if (data.role === "admin") navigate("/admin");
+  // if (data.role === "support_agent") navigate("/dashboard");
+  // if (data.role === "dispatcher") navigate("/map");
+};
 
   return (
     <div className="container">
