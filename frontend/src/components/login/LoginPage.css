@@ -73,7 +73,7 @@ label {
   color: #cbd5e1;
 }
 
-input {
+.right input {
   width: 100%;
   padding: 12px;
   border-radius: 8px;

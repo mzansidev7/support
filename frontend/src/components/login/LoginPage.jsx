@@ -1,9 +1,29 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from "lucide-react";
-import { supabaseClient } from "../../supabaseClient/supabase.config.js";
 import mainLogo from "../../Asserts/images/mainLogo.png";
 import "./LoginPage.css";
+
+const API_URL = (
+    process.env.REACT_APP_API_URL ||
+    (process.env.NODE_ENV === "development"
+        ? "http://localhost:4000"
+        : "https://track-my-kid-server-production.up.railway.app")
+).replace(/\/$/, "");
+
+const getLoginErrorMessage = (code) => {
+    switch (code) {
+        case "INVALID_CREDENTIALS":
+            return "The email or password is incorrect.";
+        case "ACCOUNT_INACTIVE":
+        case "PLATFORM_ADMIN_INACTIVE":
+            return "This account is inactive. Contact your administrator.";
+        case "PLATFORM_ADMIN_REQUIRED":
+            return "This account does not have support dashboard access.";
+        default:
+            return "Unable to sign in right now. Please try again.";
+    }
+};
 
 const LoginPage = () => {
     const [showPassword, setShowPassword] = useState(false);
@@ -20,32 +40,43 @@ const LoginPage = () => {
         setLoading(true);
         setMessage("");
         try {
-            const { data, error } = await supabaseClient
-                .from("support_user")
-                .select("*")
-                .eq("email", email)
-                .eq("password", password)
-                .single();
+            const response = await fetch(`${API_URL}/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: email.trim().toLowerCase(),
+                    password,
+                }),
+            });
+            const result = await response.json();
 
-            if (error || !data) {
+            if (!response.ok || !result.token || !result.user) {
                 setSuccess(false);
-                setMessage(error);
-                setLoading(false);
-                setTimeout(() => {
-                    setMessage("");
-                }, 10000);
+                setMessage(getLoginErrorMessage(result.error));
                 return;
             }
 
-            if (!data.is_active) {
+            if (result.user.role !== "admin") {
                 setSuccess(false);
-                setMessage("Account is disabled");
-                setLoading(false);
+                setMessage(
+                    "This account does not have support dashboard access.",
+                );
                 return;
             }
 
-            // store session
-            localStorage.setItem("user", JSON.stringify(data));
+            localStorage.setItem("token", result.token);
+            localStorage.setItem(
+                "user",
+                JSON.stringify({
+                    ...result.user,
+                    full_name:
+                        result.user.admin_profile?.name ||
+                        result.user.name ||
+                        result.user.email,
+                    support_role:
+                        result.user.admin_profile?.admin_role || "support",
+                }),
+            );
 
             setSuccess(true);
             setMessage("Login successful!");
@@ -55,10 +86,14 @@ const LoginPage = () => {
                 navigate("/dashboard");
             }, 800);
         } catch (err) {
+            console.error("Support login request failed:", err);
             setSuccess(false);
-            setMessage("Something went wrong. Try again.");
+            setMessage(
+                "Could not connect to the authentication service. Please try again.",
+            );
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     return (
@@ -81,6 +116,7 @@ const LoginPage = () => {
                             type="email"
                             placeholder="Enter your email"
                             required
+                            value={email}
                             onChange={e => setEmail(e.target.value)}
                         />
                         <div
@@ -91,6 +127,7 @@ const LoginPage = () => {
                                 type={showPassword ? "text" : "password"}
                                 placeholder="Enter your password"
                                 required
+                                value={password}
                                 onChange={e => setPassword(e.target.value)}
                             />
                             <span
@@ -121,29 +158,13 @@ const LoginPage = () => {
                     </form>
 
                     <p className="footerText">Forgot password? Reset it</p>
-                    {success ? (
+                    {message ? (
                         <div className="messageBox">
-                            <h4 className="success">{message}</h4>
-                        </div>
-                    ) : (
-                        <div className="messageBox">
-                            <h4 style={{ textAlign: "centre", color: "red" }}>
-                                Incorrect email or password
+                            <h4 className={success ? "success" : "error"}>
+                                {message}
                             </h4>
                         </div>
-                    )}
-
-                    <div className="messageBox">
-                        <h4 style={{ color: "red" }}>Testing emails:</h4>
-
-                        <h4 className="success">admin@test.com</h4>
-                        <h4 className="success">agent@test.com</h4>
-                        <h4 className="success">dispatch@test.com</h4>
-                    </div>
-                    <div className="messageBox">
-                        <h3 style={{ color: "red" }}>Password:</h3>
-                        <h4 className="success">123456</h4>
-                    </div>
+                    ) : null}
                 </div>
             </div>
         </div>

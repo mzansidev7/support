@@ -1,0 +1,41 @@
+.support-drivers-page {
+  color: #172b4d;
+  width: 100%;
+  padding: 24px clamp(16px, 2vw, 28px) 36px;
+}
+
+.driver-monitoring-card {
+  background: #fff;
+  border: 1px solid #e8edf4;
+  border-radius: 16px;
+  box-shadow: 0 6px 22px rgb(25 47 89 / 4%);
+  min-width: 0;
+}
+
+.driver-monitoring-card > div {
+  padding: clamp(18px, 2.5vw, 26px);
+}
+
+.driver-detail-label {
+  color: #748198;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.driver-detail-value {
+  color: #263751;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.driver-detail-unassigned {
+  color: #8290a5;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .support-drivers-page {
+    padding-top: 20px;
+  }
+}

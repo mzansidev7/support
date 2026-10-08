@@ -10,6 +10,10 @@ import Requests from "./components/dashboard/Requests";
 import Settings from "./components/dashboard/Settings";
 import Profile from "./components/dashboard/Profile";
 import LiveMap from "./components/dashboard/LiveMap";
+import Users from "./components/dashboard/Users";
+import MessagesInbox from "./components/dashboard/MessagesInbox";
+import Payments from "./components/dashboard/Payments";
+import SupportUsers from "./components/dashboard/SupportUsers";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
 const Main = () => {
@@ -72,6 +76,45 @@ const Main = () => {
                 />
 
                 <Route
+                    path="/users"
+                    element={
+                        <DashboardLayout
+                            isOpen={isOpen}
+                            onOpen={onOpen}
+                            onClose={onClose}
+                        >
+                            <Users />
+                        </DashboardLayout>
+                    }
+                />
+
+                <Route
+                    path="/support-users"
+                    element={
+                        <DashboardLayout
+                            isOpen={isOpen}
+                            onOpen={onOpen}
+                            onClose={onClose}
+                        >
+                            <SupportUsers />
+                        </DashboardLayout>
+                    }
+                />
+
+                <Route
+                    path="/messages"
+                    element={
+                        <DashboardLayout
+                            isOpen={isOpen}
+                            onOpen={onOpen}
+                            onClose={onClose}
+                        >
+                            <MessagesInbox />
+                        </DashboardLayout>
+                    }
+                />
+
+                <Route
                     path="/trips"
                     element={
                         <DashboardLayout
@@ -93,6 +136,19 @@ const Main = () => {
                             onClose={onClose}
                         >
                             <Vehicles />
+                        </DashboardLayout>
+                    }
+                />
+
+                <Route
+                    path="/payments"
+                    element={
+                        <DashboardLayout
+                            isOpen={isOpen}
+                            onOpen={onOpen}
+                            onClose={onClose}
+                        >
+                            <Payments />
                         </DashboardLayout>
                     }
                 />

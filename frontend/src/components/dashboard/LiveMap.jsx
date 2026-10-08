@@ -10,6 +10,7 @@ import {
 } from "@chakra-ui/react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import PageHeader from "./PageHeader";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -46,8 +47,12 @@ const getStatusColor = (status) => {
 
 const LiveMap = () => {
   return (
-    <Box p={4}>
-      <Heading mb={4}>Live Vehicle Tracking</Heading>
+    <Box className="support-live-map-page" p={{ base: 4, md: 6, xl: 8 }}>
+      <PageHeader
+        eyebrow="FLEET OPERATIONS"
+        title="Live Vehicle Tracking"
+        description="Monitor vehicle locations and fleet activity in real time."
+      />
 
       {/* 🗺️ MAP */}
       <Box borderRadius="xl" overflow="hidden" boxShadow="lg">
