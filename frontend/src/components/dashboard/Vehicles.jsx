@@ -3,6 +3,7 @@ import {
   Alert,
   AlertDescription,
   AlertIcon,
+  Avatar,
   Badge,
   Box,
   Button,
@@ -12,6 +13,7 @@ import {
   Heading,
   HStack,
   Icon,
+  Image,
   Input,
   Modal,
   ModalBody,
@@ -23,11 +25,19 @@ import {
   Select,
   SimpleGrid,
   Spinner,
+  Table,
+  TableContainer,
+  Tbody,
+  Td,
+  Th,
+  Thead,
   Text,
+  Tr,
   VStack,
 } from "@chakra-ui/react";
 import {
-  FiClock,
+  FiChevronLeft,
+  FiChevronRight,
   FiFileText,
   FiMapPin,
   FiRefreshCw,
@@ -98,6 +108,44 @@ const getVehicleScope = (vehicle) =>
 const getVehicleTitle = (vehicle) =>
   vehicle?.name || vehicle?.model || vehicle?.license_plate || "Vehicle";
 
+const getAssetUrl = (asset) => {
+  const candidate =
+    typeof asset === "string"
+      ? asset
+      : asset?.url || asset?.publicUrl || asset?.public_url;
+  if (typeof candidate !== "string") return "";
+  try {
+    const url = new URL(candidate);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+};
+
+const getAssetName = (asset, fallback) => {
+  if (typeof asset === "object" && asset) {
+    const name = asset.fileName || asset.filename || asset.name;
+    if (typeof name === "string" && name.trim()) return name;
+  }
+  const url = getAssetUrl(asset);
+  if (url) {
+    const fileName = url.split("/").pop().split("?")[0];
+    let name = fileName;
+    try {
+      name = decodeURIComponent(fileName);
+    } catch {
+      // Keep the encoded filename when it is not valid URI encoding.
+    }
+    if (name) return name;
+  }
+  return fallback;
+};
+
+const toAssetList = (assets) => {
+  if (Array.isArray(assets)) return assets;
+  return assets ? [assets] : [];
+};
+
 const Vehicles = () => {
   const cachedVehicles = useRef(readCache());
   const [vehicles, setVehicles] = useState(cachedVehicles.current || []);
@@ -105,6 +153,8 @@ const Vehicles = () => {
   const [filter, setFilter] = useState("All");
   const [scopeFilter, setScopeFilter] = useState("All");
   const [ownerFilter, setOwnerFilter] = useState("All");
+  const [verificationFilter, setVerificationFilter] = useState("All");
+  const [page, setPage] = useState(1);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [loading, setLoading] = useState(!cachedVehicles.current);
   const [refreshing, setRefreshing] = useState(false);
@@ -236,8 +286,34 @@ const Vehicles = () => {
     const matchesOwner =
       ownerFilter === "All" ||
       (scope === "fleet_owner" && String(vehicleOwnerId) === ownerFilter);
-    return matchesQuery && matchesStatus && matchesScope && matchesOwner;
+    const matchesVerification =
+      verificationFilter === "All" ||
+      (verificationFilter === "verified" &&
+        vehicle.driver?.is_verified === true) ||
+      (verificationFilter === "not_verified" &&
+        vehicle.driver?.is_verified === false);
+    return (
+      matchesQuery &&
+      matchesStatus &&
+      matchesScope &&
+      matchesOwner &&
+      matchesVerification
+    );
   });
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredVehicles.length / pageSize));
+  const paginatedVehicles = filteredVehicles.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filter, scopeFilter, ownerFilter, verificationFilter]);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, pageCount));
+  }, [pageCount]);
 
   const fleetOwners = [...new Map(
     vehicles
@@ -267,6 +343,24 @@ const Vehicles = () => {
   const offlineCount = vehicles.filter((vehicle) =>
     ["inactive", "offline"].includes(vehicle.status?.toLowerCase()),
   ).length;
+  const selectedVehiclePhotos = selectedVehicle
+    ? toAssetList(selectedVehicle.photos || selectedVehicle.vehicle_images)
+        .map((asset, index) => ({
+          asset,
+          url: getAssetUrl(asset),
+          name: getAssetName(asset, `Vehicle photo ${index + 1}`),
+        }))
+        .filter((asset) => asset.url)
+    : [];
+  const selectedVehicleDocuments = selectedVehicle
+    ? toAssetList(selectedVehicle.documents)
+        .map((asset, index) => ({
+          asset,
+          url: getAssetUrl(asset),
+          name: getAssetName(asset, `Vehicle document ${index + 1}`),
+        }))
+        .filter((asset) => asset.url)
+    : [];
 
   return (
     <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 6, xl: 8 }}>
@@ -406,6 +500,17 @@ const Vehicles = () => {
           <option>Maintenance</option>
           <option>Offline</option>
         </Select>
+        <Select
+          value={verificationFilter}
+          onChange={(event) => setVerificationFilter(event.target.value)}
+          bg="white"
+          w={{ base: "100%", md: "220px" }}
+          aria-label="Filter vehicles by assigned driver verification"
+        >
+          <option value="All">All driver verification</option>
+          <option value="verified">Verified driver</option>
+          <option value="not_verified">Not verified driver</option>
+        </Select>
       </HStack>
 
       {loading && vehicles.length === 0 ? (
@@ -416,126 +521,210 @@ const Vehicles = () => {
           </Text>
         </Flex>
       ) : filteredVehicles.length ? (
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-          {filteredVehicles.map((vehicle) => {
-            const status = formatStatus(vehicle.status);
-            const location = vehicle.location;
-            return (
-              <Card
-                key={`${getVehicleScope(vehicle)}-${vehicle.id}`}
-                borderRadius="xl"
-                boxShadow="sm"
-                border="1px solid"
-                borderColor="gray.100"
-                cursor="pointer"
-                transition="all 0.18s ease"
-                _hover={{ boxShadow: "lg", borderColor: "blue.200", transform: "translateY(-1px)" }}
-                onClick={() => setSelectedVehicle(vehicle)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setSelectedVehicle(vehicle);
-                  }
-                }}
-                aria-label={`View ${getVehicleTitle(vehicle)} details`}
-              >
-                <CardBody>
-                  <Flex justify="space-between" align="flex-start" gap={3} mb={4}>
-                    <Box minW={0}>
-                      <Heading size="sm" color="gray.800">
-                        {getVehicleTitle(vehicle)}
-                      </Heading>
-                      <Text color="gray.500" fontSize="xs" mt={1}>
-                        {vehicle.model || "Model unavailable"} ·{" "}
-                        {vehicle.license_plate ||
-                          vehicle.registration_number ||
-                          "No plate recorded"}
-                      </Text>
-                    </Box>
-                    <VStack align="flex-end" spacing={1}>
-                      <Badge colorScheme={status.color} flexShrink={0}>
-                        {status.label}
-                      </Badge>
-                      <Badge colorScheme={getVehicleScope(vehicle) === "school" ? "purple" : "blue"}>
-                        {getVehicleScope(vehicle) === "school" ? "School" : "Fleet"}
-                      </Badge>
-                    </VStack>
-                  </Flex>
-
-                  <VStack align="stretch" spacing={3}>
-                    <HStack spacing={2} color="gray.700">
-                      <Icon as={FiUser} color="blue.500" />
-                      <Text fontSize="sm">
-                        Driver:{" "}
-                        {vehicle.driver?.users?.name ||
-                          vehicle.driver?.name ||
-                          "Not assigned"}
-                        {vehicle.driver?.status
-                          ? ` · ${vehicle.driver.status}`
-                          : ""}
-                      </Text>
-                    </HStack>
-                    <HStack spacing={2} color="gray.700">
-                      <Icon as={FiTruck} color="purple.500" />
-                      <Text fontSize="sm">
-                        {getVehicleScope(vehicle) === "school"
-                          ? `School: ${vehicle.school?.name || "Unknown"}`
-                          : `Fleet owner: ${
-                              vehicle.owner?.company_name ||
-                              vehicle.owner?.users?.name ||
-                              "Unknown"
-                            }`}
-                      </Text>
-                    </HStack>
-                    <HStack spacing={2} color="gray.700">
-                      <Icon as={FiMapPin} color="green.600" />
-                      <Text fontSize="sm">
-                        {getVehicleScope(vehicle) === "school" ? "Trip: " : "Route: "}
-                        {vehicle.route?.route_name ||
-                          vehicle.trip?.name ||
-                          (getVehicleScope(vehicle) === "school"
-                            ? "No assigned trip"
-                            : "No active route")}
-                        {vehicle.route
-                          ? ` · ${vehicle.route.start_location || "Start unavailable"} → ${vehicle.route.end_location || "End unavailable"}`
-                          : vehicle.trip?.destination
-                            ? ` · ${vehicle.trip.destination}`
-                            : ""}
-                      </Text>
-                    </HStack>
-                    <HStack spacing={2} color="gray.700">
-                      <Icon as={FiUsers} color="orange.500" />
-                      <Text fontSize="sm">
-                        {vehicle.studentCount || 0}{" "}
-                        {vehicle.studentCount === 1 ? "student" : "students"}
-                        {vehicle.capacity ? ` · Capacity ${vehicle.capacity}` : ""}
-                      </Text>
-                    </HStack>
-                    {vehicle.trackingSession ? (
-                      <HStack spacing={2} color="gray.700">
-                        <Icon as={FiClock} color="teal.600" />
+        <Box
+          border="1px solid"
+          borderColor="gray.200"
+          borderRadius="xl"
+          bg="white"
+          overflow="hidden"
+          boxShadow="sm"
+        >
+          <Flex
+            justify="space-between"
+            align="center"
+            gap={3}
+            px={4}
+            py={3}
+            borderBottom="1px solid"
+            borderColor="gray.100"
+          >
+            <Box>
+              <Heading size="sm" color="gray.800">
+                Vehicle fleet
+              </Heading>
+              <Text fontSize="sm" color="gray.500" mt={1}>
+                Browse vehicle details, assignments, and current status.
+              </Text>
+            </Box>
+            <Badge colorScheme="blue" borderRadius="full" px={3} py={1}>
+              {filteredVehicles.length}{" "}
+              {filteredVehicles.length === 1 ? "vehicle" : "vehicles"}
+            </Badge>
+          </Flex>
+          <TableContainer>
+            <Table size="sm" variant="simple">
+              <Thead bg="gray.50">
+                <Tr>
+                  <Th>Vehicle</Th>
+                  <Th>Owner / school</Th>
+                  <Th>Driver & route</Th>
+                  <Th>Driver verification</Th>
+                  <Th>Status</Th>
+                  <Th>Students</Th>
+                  <Th textAlign="right">Details</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {paginatedVehicles.map((vehicle) => {
+                  const status = formatStatus(vehicle.status);
+                  const isSchoolVehicle = getVehicleScope(vehicle) === "school";
+                  const image = toAssetList(
+                    vehicle.photos || vehicle.vehicle_images,
+                  )
+                    .map(getAssetUrl)
+                    .find(Boolean);
+                  const ownerOrSchool = isSchoolVehicle
+                    ? vehicle.school?.name || "Unknown school"
+                    : vehicle.owner?.company_name ||
+                      vehicle.owner?.users?.name ||
+                      "Unknown fleet owner";
+                  const routeName =
+                    vehicle.route?.route_name ||
+                    vehicle.trip?.name ||
+                    (isSchoolVehicle ? "No assigned trip" : "No active route");
+                  return (
+                    <Tr
+                      key={`${getVehicleScope(vehicle)}-${vehicle.id}`}
+                      _hover={{ bg: "blue.50" }}
+                    >
+                      <Td minW="245px">
+                        <HStack spacing={3}>
+                          <Avatar
+                            name={getVehicleTitle(vehicle)}
+                            src={image || undefined}
+                            icon={<Icon as={FiTruck} />}
+                            size="md"
+                            borderRadius="lg"
+                          />
+                          <Box minW={0}>
+                            <Text fontWeight="700" color="gray.800">
+                              {getVehicleTitle(vehicle)}
+                            </Text>
+                            <Text fontSize="sm" color="gray.500">
+                              {vehicle.model || "Model unavailable"} ·{" "}
+                              {vehicle.license_plate ||
+                                vehicle.registration_number ||
+                                "No plate recorded"}
+                            </Text>
+                          </Box>
+                        </HStack>
+                      </Td>
+                      <Td minW="165px">
+                        <Badge
+                          colorScheme={isSchoolVehicle ? "purple" : "blue"}
+                          mb={1}
+                        >
+                          {isSchoolVehicle ? "School" : "Fleet"}
+                        </Badge>
+                        <Text fontSize="sm">{ownerOrSchool}</Text>
+                      </Td>
+                      <Td minW="200px">
+                        <HStack spacing={2} align="flex-start">
+                          <Icon as={FiUser} color="blue.500" mt={0.5} />
+                          <Box>
+                            <Text fontSize="sm">
+                              {vehicle.driver?.users?.name ||
+                                vehicle.driver?.name ||
+                                "Not assigned"}
+                            </Text>
+                            <Text fontSize="xs" color="gray.500">
+                              {routeName}
+                              {vehicle.trip?.destination
+                                ? ` · ${vehicle.trip.destination}`
+                                : ""}
+                            </Text>
+                          </Box>
+                        </HStack>
+                      </Td>
+                      <Td>
+                        {typeof vehicle.driver?.is_verified === "boolean" ? (
+                          <Badge
+                            colorScheme={
+                              vehicle.driver.is_verified ? "green" : "yellow"
+                            }
+                          >
+                            {vehicle.driver.is_verified
+                              ? "Verified"
+                              : "Not verified"}
+                          </Badge>
+                        ) : (
+                          <Text fontSize="xs" color="gray.500">
+                            Not available
+                          </Text>
+                        )}
+                      </Td>
+                      <Td>
+                        <Badge colorScheme={status.color}>{status.label}</Badge>
+                      </Td>
+                      <Td whiteSpace="nowrap">
                         <Text fontSize="sm">
-                          Tracking {vehicle.trackingSession.status} since{" "}
-                          {formatDateTime(vehicle.trackingSession.started_at)}
+                          {vehicle.studentCount || 0}{" "}
+                          {vehicle.studentCount === 1 ? "student" : "students"}
                         </Text>
-                      </HStack>
-                    ) : null}
-                    {location ? (
-                      <Text color="gray.500" fontSize="xs">
-                        Last location update: {formatDateTime(location.recorded_at)}
-                      </Text>
-                    ) : null}
-                  </VStack>
-                  <Text mt={4} color="blue.600" fontSize="xs" fontWeight="700">
-                    View full vehicle details →
-                  </Text>
-                </CardBody>
-              </Card>
-            );
-          })}
-        </SimpleGrid>
+                        {vehicle.capacity ? (
+                          <Text fontSize="xs" color="gray.500">
+                            Capacity {vehicle.capacity}
+                          </Text>
+                        ) : null}
+                      </Td>
+                      <Td textAlign="right">
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          colorScheme="blue"
+                          onClick={() => setSelectedVehicle(vehicle)}
+                        >
+                          View details
+                        </Button>
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </Tbody>
+            </Table>
+          </TableContainer>
+          <Flex
+            align="center"
+            justify="space-between"
+            gap={3}
+            px={4}
+            py={3}
+            borderTop="1px solid"
+            borderColor="gray.100"
+            wrap="wrap"
+          >
+            <Text fontSize="sm" color="gray.500">
+              Showing {(page - 1) * pageSize + 1}–
+              {Math.min(page * pageSize, filteredVehicles.length)} of{" "}
+              {filteredVehicles.length} vehicles
+            </Text>
+            <HStack spacing={2}>
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<Icon as={FiChevronLeft} />}
+                onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                isDisabled={page <= 1}
+              >
+                Previous
+              </Button>
+              <Text fontSize="sm" color="gray.600">
+                Page {page} of {pageCount}
+              </Text>
+              <Button
+                size="sm"
+                variant="outline"
+                rightIcon={<Icon as={FiChevronRight} />}
+                onClick={() =>
+                  setPage((currentPage) => Math.min(pageCount, currentPage + 1))
+                }
+                isDisabled={page >= pageCount}
+              >
+                Next
+              </Button>
+            </HStack>
+          </Flex>
+        </Box>
       ) : (
         <Card borderRadius="xl">
           <CardBody py={12} textAlign="center">
@@ -841,22 +1030,102 @@ const Vehicles = () => {
                       ) : (
                         <Text color="gray.500" fontSize="sm">No live location available.</Text>
                       )}
-                      {Array.isArray(selectedVehicle.documents) &&
-                      selectedVehicle.documents.length ? (
-                        <HStack align="flex-start">
-                          <Icon as={FiFileText} color="blue.500" mt={1} />
-                          <Text color="gray.700" fontSize="sm">
-                            {selectedVehicle.documents.length} vehicle documents on file
-                          </Text>
-                        </HStack>
-                      ) : null}
-                      {Array.isArray(selectedVehicle.photos) &&
-                      selectedVehicle.photos.length ? (
-                        <Text color="gray.500" fontSize="sm">
-                          {selectedVehicle.photos.length} vehicle photos on file
-                        </Text>
-                      ) : null}
                     </VStack>
+                  </CardBody>
+                </Card>
+                <Card
+                  gridColumn={{ md: "1 / -1" }}
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                >
+                  <CardBody>
+                    <Heading
+                      size="xs"
+                      color="gray.500"
+                      textTransform="uppercase"
+                      mb={4}
+                    >
+                      Vehicle images
+                    </Heading>
+                    {selectedVehiclePhotos.length ? (
+                      <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={3}>
+                        {selectedVehiclePhotos.map(({ url, name }, index) => (
+                          <a
+                            key={`${url}-${index}`}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Open ${name}`}
+                          >
+                            <Image
+                              src={url}
+                              alt={name}
+                              w="100%"
+                              h="180px"
+                              objectFit="cover"
+                              borderRadius="lg"
+                              bg="gray.100"
+                            />
+                            <Text fontSize="xs" color="gray.600" mt={1} noOfLines={1}>
+                              {name}
+                            </Text>
+                          </a>
+                        ))}
+                      </SimpleGrid>
+                    ) : (
+                      <Text fontSize="sm" color="gray.500">
+                        No vehicle images are available.
+                      </Text>
+                    )}
+                  </CardBody>
+                </Card>
+                <Card
+                  gridColumn={{ md: "1 / -1" }}
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                >
+                  <CardBody>
+                    <Heading
+                      size="xs"
+                      color="gray.500"
+                      textTransform="uppercase"
+                      mb={4}
+                    >
+                      Supported documents
+                    </Heading>
+                    {selectedVehicleDocuments.length ? (
+                      <VStack align="stretch" spacing={2}>
+                        {selectedVehicleDocuments.map(({ url, name }, index) => (
+                          <HStack
+                            key={`${url}-${index}`}
+                            border="1px solid"
+                            borderColor="gray.100"
+                            borderRadius="md"
+                            p={3}
+                          >
+                            <Icon as={FiFileText} color="blue.500" />
+                            <Text
+                              as="a"
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              color="blue.600"
+                              fontSize="sm"
+                              fontWeight="600"
+                              wordBreak="break-word"
+                            >
+                              {name}
+                            </Text>
+                          </HStack>
+                        ))}
+                      </VStack>
+                    ) : (
+                      <Text fontSize="sm" color="gray.500">
+                        No supported documents are available.
+                      </Text>
+                    )}
                   </CardBody>
                 </Card>
               </SimpleGrid>

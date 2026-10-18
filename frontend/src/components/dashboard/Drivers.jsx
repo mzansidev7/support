@@ -33,6 +33,8 @@ import {
 } from "@chakra-ui/react";
 import {
   FiFileText,
+  FiEye,
+  FiMapPin,
   FiMessageCircle,
   FiPaperclip,
   FiRefreshCw,
@@ -83,6 +85,46 @@ const formatDate = (value) => {
     : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 };
 
+const getVehicleCategory = (vehicle) => {
+  const type = String(vehicle?.vehicle_type || "").toLowerCase();
+  const description = String(
+    `${vehicle?.name || ""} ${vehicle?.model || ""}`,
+  ).toLowerCase();
+  if (
+    /\b(bus|minibus|coach|van)\b/.test(type) ||
+    /\b(bus|minibus|coach|van)\b/.test(description)
+  ) {
+    return "School bus";
+  }
+  if (/\b(car|sedan|hatchback|suv|coupe)\b/.test(`${type} ${description}`)) {
+    return "Car";
+  }
+  const capacity = Number(vehicle?.capacity);
+  return Number.isFinite(capacity) && capacity > 7 ? "School bus" : "Car";
+};
+
+const isDriverVerified = (driver) =>
+  driver?.is_verified === true ||
+  String(driver?.is_verified).toLowerCase() === "verified";
+
+const getDriverVehicleLabel = (driver) => {
+  if (!isDriverVerified(driver)) return "Cancelled vehicle";
+
+  const vehicle = driver?.vehicle;
+  const identifiers = [
+    vehicle?.name,
+    vehicle?.license_plate,
+    driver?.vehicle_plate_number,
+  ].filter(Boolean);
+  if (
+    !identifiers.length ||
+    identifiers.some((value) => /^PENDING-/i.test(String(value).trim()))
+  ) {
+    return "Not assigned to a vehicle";
+  }
+  return `${getVehicleCategory(vehicle)} · ${identifiers.join(" · ")}`;
+};
+
 const parseMessageAttachment = (content) => {
   try {
     const attachment = JSON.parse(content);
@@ -90,7 +132,8 @@ const parseMessageAttachment = (content) => {
       attachment?.type === "attachment" &&
       ["image", "audio", "pdf"].includes(attachment.mediaType) &&
       typeof attachment.url === "string" &&
-      (attachment.caption === undefined || typeof attachment.caption === "string")
+      (attachment.caption === undefined ||
+        typeof attachment.caption === "string")
     ) {
       return attachment;
     }
@@ -102,6 +145,11 @@ const parseMessageAttachment = (content) => {
 
 const Drivers = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: driverDetailsOpen,
+    onOpen: openDriverDetails,
+    onClose: closeDriverDetails,
+  } = useDisclosure();
   const location = useLocation();
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
@@ -207,42 +255,47 @@ const Drivers = () => {
     );
   });
 
-  const openConversation = useCallback(async (driver) => {
-    setSelectedDriver(driver);
-    const cachedConversationId = readMessageCache(
-      `${cacheScope}:driver-conversation:${driver.user_id}`,
-    );
-    setConversationId(cachedConversationId || "");
-    setMessages(
-      cachedConversationId
-        ? readMessageCache(`${cacheScope}:messages:${cachedConversationId}`) || []
-        : [],
-    );
-    setMessageDraft("");
-    setSelectedImage(null);
-    setMessageError("");
-    setConversationLoading(true);
-    onOpen();
-    try {
-      if (!driver.user_id)
-        throw new Error("This driver does not have a linked user account.");
-      const result = await apiRequest(
-        `/admin/drivers/${encodeURIComponent(driver.user_id)}/conversation`,
-        { method: "POST", body: JSON.stringify({}) },
-      );
-      writeMessageCache(
+  const openConversation = useCallback(
+    async (driver) => {
+      setSelectedDriver(driver);
+      const cachedConversationId = readMessageCache(
         `${cacheScope}:driver-conversation:${driver.user_id}`,
-        result.conversationId,
       );
-      setConversationId(result.conversationId);
-      await loadMessages(result.conversationId);
-    } catch (requestError) {
-      console.error("Could not open driver conversation:", requestError);
-      setMessageError(requestError.message);
-    } finally {
-      setConversationLoading(false);
-    }
-  }, [cacheScope, loadMessages, onOpen]);
+      setConversationId(cachedConversationId || "");
+      setMessages(
+        cachedConversationId
+          ? readMessageCache(
+              `${cacheScope}:messages:${cachedConversationId}`,
+            ) || []
+          : [],
+      );
+      setMessageDraft("");
+      setSelectedImage(null);
+      setMessageError("");
+      setConversationLoading(true);
+      onOpen();
+      try {
+        if (!driver.user_id)
+          throw new Error("This driver does not have a linked user account.");
+        const result = await apiRequest(
+          `/admin/drivers/${encodeURIComponent(driver.user_id)}/conversation`,
+          { method: "POST", body: JSON.stringify({}) },
+        );
+        writeMessageCache(
+          `${cacheScope}:driver-conversation:${driver.user_id}`,
+          result.conversationId,
+        );
+        setConversationId(result.conversationId);
+        await loadMessages(result.conversationId);
+      } catch (requestError) {
+        console.error("Could not open driver conversation:", requestError);
+        setMessageError(requestError.message);
+      } finally {
+        setConversationLoading(false);
+      }
+    },
+    [cacheScope, loadMessages, onOpen],
+  );
 
   useEffect(() => {
     const targetDriverId = location.state?.openConversationDriverId;
@@ -253,7 +306,14 @@ const Drivers = () => {
     if (!driver) return;
     navigate(location.pathname, { replace: true, state: null });
     void openConversation(driver);
-  }, [drivers, loading, location.pathname, location.state, navigate, openConversation]);
+  }, [
+    drivers,
+    loading,
+    location.pathname,
+    location.state,
+    navigate,
+    openConversation,
+  ]);
 
   const sendMessage = async (event) => {
     event.preventDefault();
@@ -372,23 +432,13 @@ const Drivers = () => {
           {filteredDrivers.map((driver) => {
             const name = driver.users?.name || "Driver";
             const status = (driver.status || "inactive").toLowerCase();
-            const vehicle = driver.vehicle;
-            const vehicleIdentifiers = [
-              vehicle?.name,
-              vehicle?.license_plate,
-              driver.vehicle_plate_number,
-            ].filter(Boolean);
-            const hasPendingVehicle = vehicleIdentifiers.some((value) =>
-              /^PENDING-/i.test(String(value).trim()),
-            );
-            const assignedVehicleLabel = vehicle
-              ? [vehicle.name, vehicle.license_plate].filter(Boolean).join(" · ")
-              : driver.vehicle_plate_number;
-            const vehicleLabel = hasPendingVehicle
-              ? "Not assigned to a vehicle"
-              : assignedVehicleLabel || "Not assigned to a vehicle";
+            const isVerified = isDriverVerified(driver);
+            const verified = isVerified ? "Verified" : "Not verified";
+            const vehicleLabel = getDriverVehicleLabel(driver);
             const ownerName =
               driver.owner?.company_name || driver.owner?.users?.name;
+            const vehicleUnavailable =
+              !isVerified || vehicleLabel === "Not assigned to a vehicle";
             return (
               <Card key={driver.id} className="driver-monitoring-card">
                 <CardBody>
@@ -415,6 +465,12 @@ const Drivers = () => {
                     >
                       {status}
                     </Badge>
+                    <Badge
+                      colorScheme={isVerified ? "green" : "gray"}
+                      textTransform="capitalize"
+                    >
+                      {verified}
+                    </Badge>
                   </Flex>
 
                   <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3} mb={5}>
@@ -423,7 +479,7 @@ const Drivers = () => {
                       <Box>
                         <Text className="driver-detail-label">Vehicle</Text>
                         <Text
-                          className={`driver-detail-value${hasPendingVehicle || !vehicleLabel ? " driver-detail-unassigned" : ""}`}
+                          className={`driver-detail-value${vehicleUnavailable ? " driver-detail-unassigned" : ""}`}
                         >
                           {vehicleLabel}
                         </Text>
@@ -486,6 +542,17 @@ const Drivers = () => {
                     </Text>
                     <Button
                       size="sm"
+                      variant="outline"
+                      leftIcon={<Icon as={FiEye} />}
+                      onClick={() => {
+                        setSelectedDriver(driver);
+                        openDriverDetails();
+                      }}
+                    >
+                      View details
+                    </Button>
+                    <Button
+                      size="sm"
                       colorScheme="blue"
                       leftIcon={<Icon as={FiMessageCircle} />}
                       onClick={() => openConversation(driver)}
@@ -510,6 +577,172 @@ const Drivers = () => {
           </CardBody>
         </Card>
       ) : null}
+
+      <Modal
+        isOpen={driverDetailsOpen}
+        onClose={closeDriverDetails}
+        size="2xl"
+        scrollBehavior="inside"
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            <HStack>
+              <Avatar
+                name={selectedDriver?.users?.name || "Driver"}
+                src={selectedDriver?.avatar || undefined}
+              />
+              <Box>
+                <Text>{selectedDriver?.users?.name || "Driver details"}</Text>
+                <Text fontSize="sm" fontWeight="normal" color="gray.500">
+                  {selectedDriver?.users?.email || "No email on file"}
+                </Text>
+              </Box>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {selectedDriver ? (
+              <VStack align="stretch" spacing={4} pb={2}>
+                <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+                  <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                    <Text fontSize="xs" color="gray.500">Linked fleet owner</Text>
+                    <Text fontWeight="700" mt={1}>
+                      {selectedDriver.owner?.company_name ||
+                        selectedDriver.owner?.users?.name ||
+                        "Not assigned"}
+                    </Text>
+                    {selectedDriver.owner?.users?.email ? (
+                      <Text fontSize="sm" color="gray.600">
+                        {selectedDriver.owner.users.email}
+                      </Text>
+                    ) : null}
+                  </Box>
+                  <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                    <Text fontSize="xs" color="gray.500">Assigned vehicle</Text>
+                    <Text fontWeight="700" mt={1}>
+                      {getDriverVehicleLabel(selectedDriver)}
+                    </Text>
+                  </Box>
+                </SimpleGrid>
+
+                <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                  <Flex justify="space-between" align="flex-start" gap={3}>
+                    <Box>
+                      <Text fontSize="xs" color="gray.500">Route and directions</Text>
+                      <Text fontWeight="700" mt={1}>
+                        {selectedDriver.route?.route_name || "No active route"}
+                      </Text>
+                      {selectedDriver.route ? (
+                        <Text fontSize="sm" color="gray.600" mt={1}>
+                          {selectedDriver.route.start_location || "Start not recorded"}
+                          {" → "}
+                          {selectedDriver.route.end_location || "Destination not recorded"}
+                        </Text>
+                      ) : null}
+                    </Box>
+                    {selectedDriver.route?.start_location &&
+                    selectedDriver.route?.end_location ? (
+                      <Button
+                        as="a"
+                        href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(selectedDriver.route.start_location)}&destination=${encodeURIComponent(selectedDriver.route.end_location)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<Icon as={FiMapPin} />}
+                      >
+                        Directions
+                      </Button>
+                    ) : null}
+                  </Flex>
+                </Box>
+
+                <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                  <Flex justify="space-between" align="center" mb={3}>
+                    <Text fontWeight="700">Students on route</Text>
+                    <Badge colorScheme="blue">
+                      {selectedDriver.studentCount || 0}{" "}
+                      {(selectedDriver.studentCount || 0) === 1 ? "student" : "students"}
+                    </Badge>
+                  </Flex>
+                  {selectedDriver.students?.length ? (
+                    <VStack align="stretch" spacing={2}>
+                      {selectedDriver.students.map((student) => (
+                        <HStack
+                          key={student.id}
+                          borderTop="1px solid"
+                          borderColor="gray.100"
+                          pt={2}
+                        >
+                          <Avatar
+                            name={`${student.name || ""} ${student.lastname || ""}`}
+                            src={student.avatar || undefined}
+                            size="sm"
+                          />
+                          <Box>
+                            <Text fontWeight="600">
+                              {[student.name, student.lastname]
+                                .filter(Boolean)
+                                .join(" ") || "Unnamed student"}
+                            </Text>
+                            <Text fontSize="xs" color="gray.500">
+                              Grade: {student.grade || "Not recorded"}
+                            </Text>
+                          </Box>
+                        </HStack>
+                      ))}
+                    </VStack>
+                  ) : (
+                    <Text fontSize="sm" color="gray.500">
+                      No students are assigned to this route.
+                    </Text>
+                  )}
+                </Box>
+
+                <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                  <Flex justify="space-between" align="center" gap={3}>
+                    <Box>
+                      <Text fontSize="xs" color="gray.500">Last known driver location</Text>
+                      {selectedDriver.location ? (
+                        <>
+                          <Text fontWeight="600" mt={1}>
+                            {selectedDriver.location.latitude},{" "}
+                            {selectedDriver.location.longitude}
+                          </Text>
+                          <Text fontSize="xs" color="gray.500" mt={1}>
+                            Updated {formatDate(selectedDriver.location.recorded_at)}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text fontSize="sm" color="gray.600" mt={1}>
+                          No location has been recorded.
+                        </Text>
+                      )}
+                    </Box>
+                    {selectedDriver.location ? (
+                      <Button
+                        as="a"
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedDriver.location.latitude},${selectedDriver.location.longitude}`)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<Icon as={FiMapPin} />}
+                      >
+                        View on map
+                      </Button>
+                    ) : null}
+                  </Flex>
+                </Box>
+              </VStack>
+            ) : null}
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={closeDriverDetails}>Close details</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <Modal
         isOpen={isOpen}

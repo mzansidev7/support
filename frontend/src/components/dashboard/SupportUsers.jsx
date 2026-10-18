@@ -12,7 +12,6 @@ import {
   Flex,
   FormControl,
   FormLabel,
-  Heading,
   HStack,
   Icon,
   Input,
@@ -24,15 +23,30 @@ import {
   ModalHeader,
   ModalOverlay,
   Select,
-  SimpleGrid,
   Spinner,
+  Table,
+  TableContainer,
   Switch,
   Text,
+  Td,
+  Th,
+  Thead,
+  Tbody,
+  Tr,
   VStack,
   useDisclosure,
 } from "@chakra-ui/react";
-import { FiEdit2, FiPlus, FiRefreshCw, FiShield } from "react-icons/fi";
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiEdit2,
+  FiPlus,
+  FiRefreshCw,
+  FiShield,
+} from "react-icons/fi";
 import PageHeader from "./PageHeader";
+import { readMessageCache, writeMessageCache } from "./messageCache";
+import { getCurrentUserIds, isCurrentUserId } from "../../utils/currentUserIdentity";
 
 const API_URL = (
   process.env.REACT_APP_API_URL ||
@@ -67,10 +81,18 @@ const readCurrentUser = () => {
 const SupportUsers = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const currentUser = useMemo(readCurrentUser, []);
+  const currentUserIds = useMemo(getCurrentUserIds, []);
   const isSuperAdmin = currentUser?.admin_profile?.admin_role === "super_admin";
-  const [users, setUsers] = useState([]);
+  const cacheKey = `admin:${currentUser?.id || "unknown"}:support-users`;
+  const [users, setUsers] = useState(() => {
+    const cached = readMessageCache(cacheKey);
+    return Array.isArray(cached) ? cached : [];
+  });
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(
+    () => !Array.isArray(readMessageCache(cacheKey)),
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -94,6 +116,7 @@ const SupportUsers = () => {
         throw new Error(result?.error || "Unable to load support users.");
       }
       setUsers(result);
+      writeMessageCache(cacheKey, result);
     } catch (requestError) {
       console.error("Could not load platform support users:", requestError);
       setError(requestError?.message || "Unable to load support users.");
@@ -101,7 +124,7 @@ const SupportUsers = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [cacheKey]);
 
   useEffect(() => {
     void loadUsers();
@@ -112,6 +135,20 @@ const SupportUsers = () => {
       .toLowerCase()
       .includes(search.trim().toLowerCase()),
   );
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const paginatedUsers = filteredUsers.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, pageCount));
+  }, [pageCount]);
 
   const openCreate = () => {
     setEditingUser(null);
@@ -249,7 +286,13 @@ const SupportUsers = () => {
         </Alert>
       ) : null}
 
-      <HStack mb={4} justify="space-between">
+      <Flex
+        mb={4}
+        justify="space-between"
+        align={{ base: "stretch", sm: "center" }}
+        direction={{ base: "column", sm: "row" }}
+        gap={3}
+      >
         <Input
           maxW={{ base: "100%", md: "380px" }}
           value={search}
@@ -258,58 +301,172 @@ const SupportUsers = () => {
           bg="white"
           aria-label="Search support users"
         />
-        <Badge colorScheme="blue" px={3} py={2} borderRadius="full">
-          {filteredUsers.length} users
+        <Badge
+          alignSelf={{ base: "flex-start", sm: "center" }}
+          colorScheme="blue"
+          px={3}
+          py={2}
+          borderRadius="full"
+        >
+          {filteredUsers.length}{" "}
+          {filteredUsers.length === 1 ? "user" : "users"}
         </Badge>
-      </HStack>
+      </Flex>
 
       {loading ? (
         <Flex justify="center" py={16}>
           <Spinner size="xl" color="blue.500" />
         </Flex>
       ) : filteredUsers.length ? (
-        <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={4}>
-          {filteredUsers.map((user) => (
-            <Card key={user.id} border="1px solid" borderColor="gray.100">
-              <CardBody>
-                <Flex justify="space-between" align="flex-start" gap={4}>
-                  <HStack minW={0} align="flex-start" spacing={3}>
-                    <Avatar name={user.name || user.email} />
-                    <Box minW={0}>
-                      <Heading size="sm" noOfLines={1}>
-                        {user.name || "Unnamed support user"}
-                      </Heading>
-                      <Text color="gray.500" fontSize="sm" mt={1} noOfLines={1}>
-                        {user.email}
-                      </Text>
-                      <HStack mt={3} spacing={2}>
-                        <Badge colorScheme="purple">
-                          {roleLabels[user.admin_role] || user.admin_role}
-                        </Badge>
-                        <Badge colorScheme={user.is_active ? "green" : "gray"}>
-                          {user.is_active ? "Active" : "Inactive"}
-                        </Badge>
+        <Box
+          border="1px solid"
+          borderColor="gray.200"
+          borderRadius="xl"
+          bg="white"
+          overflow="hidden"
+          boxShadow="sm"
+        >
+          <Flex
+            justify="space-between"
+            align={{ base: "flex-start", sm: "center" }}
+            direction={{ base: "column", sm: "row" }}
+            gap={2}
+            p={4}
+            borderBottom="1px solid"
+            borderColor="gray.100"
+          >
+            <Box>
+              <Text fontWeight="700" color="gray.800">
+                Platform support accounts
+              </Text>
+              <Text fontSize="sm" color="gray.500">
+                Review account roles, access status, and manage permissions.
+              </Text>
+            </Box>
+            <Badge colorScheme="blue" borderRadius="full" px={3} py={1}>
+              {filteredUsers.length}{" "}
+              {filteredUsers.length === 1 ? "account" : "accounts"}
+            </Badge>
+          </Flex>
+          <TableContainer>
+            <Table size="sm" variant="simple">
+              <Thead bg="gray.50">
+                <Tr>
+                  <Th>Support user</Th>
+                  <Th>Access role</Th>
+                  <Th>Status</Th>
+                  <Th>Added</Th>
+                  {isSuperAdmin ? <Th textAlign="right">Actions</Th> : null}
+                </Tr>
+              </Thead>
+              <Tbody>
+                {paginatedUsers.map((user) => (
+                  <Tr key={user.id} _hover={{ bg: "blue.50" }}>
+                    <Td minW="250px">
+                      <HStack spacing={3}>
+                        <Avatar
+                          name={user.name || user.email}
+                          size="sm"
+                          bg="blue.100"
+                          color="blue.700"
+                        />
+                        <Box minW={0}>
+                          <HStack spacing={2}>
+                            <Text fontWeight="600" noOfLines={1}>
+                              {user.name || "Unnamed support user"}
+                            </Text>
+                            {user.is_current_user ||
+                            isCurrentUserId(user.id, currentUserIds) ? (
+                              <Badge colorScheme="blue">You</Badge>
+                            ) : null}
+                          </HStack>
+                          <Text
+                            color="gray.500"
+                            fontSize="sm"
+                            noOfLines={1}
+                          >
+                            {user.email || "No email provided"}
+                          </Text>
+                        </Box>
                       </HStack>
-                    </Box>
-                  </HStack>
-                  {isSuperAdmin ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      leftIcon={<Icon as={FiEdit2} />}
-                      onClick={() => openEdit(user)}
-                    >
-                      Edit
-                    </Button>
-                  ) : null}
-                </Flex>
-                <Text color="gray.500" fontSize="xs" mt={4}>
-                  Added {user.created_at ? new Date(user.created_at).toLocaleDateString() : "date unavailable"}
-                </Text>
-              </CardBody>
-            </Card>
-          ))}
-        </SimpleGrid>
+                    </Td>
+                    <Td>
+                      <Badge colorScheme="purple">
+                        {roleLabels[user.admin_role] || user.admin_role}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge colorScheme={user.is_active ? "green" : "gray"}>
+                        {user.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </Td>
+                    <Td whiteSpace="nowrap">
+                      <Text fontSize="sm" color="gray.600">
+                        {user.created_at
+                          ? new Date(user.created_at).toLocaleDateString()
+                          : "Date unavailable"}
+                      </Text>
+                    </Td>
+                    {isSuperAdmin ? (
+                      <Td textAlign="right">
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          leftIcon={<Icon as={FiEdit2} />}
+                          onClick={() => openEdit(user)}
+                        >
+                          Edit
+                        </Button>
+                      </Td>
+                    ) : null}
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </TableContainer>
+          <Flex
+            align="center"
+            justify="space-between"
+            gap={3}
+            p={4}
+            borderTop="1px solid"
+            borderColor="gray.100"
+            wrap="wrap"
+          >
+            <Text fontSize="sm" color="gray.500">
+              Showing {(page - 1) * pageSize + 1}–
+              {Math.min(page * pageSize, filteredUsers.length)} of{" "}
+              {filteredUsers.length} support users
+            </Text>
+            <HStack spacing={2}>
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<Icon as={FiChevronLeft} />}
+                onClick={() =>
+                  setPage((currentPage) => Math.max(1, currentPage - 1))
+                }
+                isDisabled={page <= 1}
+              >
+                Previous
+              </Button>
+              <Text fontSize="sm" color="gray.600">
+                Page {page} of {pageCount}
+              </Text>
+              <Button
+                size="sm"
+                variant="outline"
+                rightIcon={<Icon as={FiChevronRight} />}
+                onClick={() =>
+                  setPage((currentPage) => Math.min(pageCount, currentPage + 1))
+                }
+                isDisabled={page >= pageCount}
+              >
+                Next
+              </Button>
+            </HStack>
+          </Flex>
+        </Box>
       ) : (
         <Card>
           <CardBody textAlign="center" py={12}>

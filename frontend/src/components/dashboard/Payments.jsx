@@ -187,7 +187,7 @@ const Payments = () => {
         throw new Error(
           result?.error === "PLATFORM_ADMIN_REQUIRED"
             ? "This account is not authorized to view commission finances."
-            : result?.error || "Unable to load cash commissions.",
+            : result?.error || "Unable to load finance records.",
         );
       }
       setReport(result);
@@ -229,9 +229,9 @@ const Payments = () => {
         );
       }
     } catch (requestError) {
-      console.error("Could not load commission report:", requestError);
+      console.error("Could not load finance report:", requestError);
       setError(
-        requestError?.message || "Unable to load cash commissions.",
+        requestError?.message || "Unable to load finance records.",
       );
     } finally {
       setLoading(false);
@@ -319,33 +319,33 @@ const Payments = () => {
 
   const metrics = [
     {
-      label: "Outstanding",
-      value: summary.owing_cents,
-      caption: `${summary.owing_owner_count || 0} owners owing`,
+      label: "Owner subscriptions unpaid",
+      value: summary.owner_subscription_invoices_outstanding_cents,
+      caption: `${summary.owner_subscription_overdue_count || 0} subscriptions overdue`,
       color: "red.500",
       icon: FiAlertCircle,
       scheme: "red",
     },
     {
-      label: "Not invoiced",
-      value: summary.not_invoiced_cents,
-      caption: "Accrued from confirmed cash",
+      label: "Client fares outstanding",
+      value: summary.client_fare_outstanding_cents,
+      caption: `${formatMoney(summary.client_fare_overdue_cents)} overdue`,
       color: "orange.500",
       icon: FiClock,
       scheme: "orange",
     },
     {
-      label: "Settled",
-      value: summary.settled_cents,
-      caption: "Collected by the platform",
+      label: "Client service fees collected",
+      value: summary.client_service_fees_collected_cents,
+      caption: "R5 per child, paid by clients",
       color: "green.500",
       icon: FiCheckCircle,
       scheme: "green",
     },
     {
-      label: "Total accrued",
-      value: summary.accrued_cents,
-      caption: "Cash-payment commission",
+      label: "Legacy owner fees owing",
+      value: summary.legacy_owner_fees_owing_cents ?? summary.owing_cents,
+      caption: "Balances from the previous owner-billed policy",
       color: "blue.500",
       icon: FiDollarSign,
       scheme: "blue",
@@ -357,7 +357,7 @@ const Payments = () => {
       <PageHeader
         eyebrow="PLATFORM FINANCE"
         title="Payments & commissions"
-        description="Manage school subscriptions and fleet-owner commissions."
+        description="Track subscriptions, client fares, service fees and legacy owner balances."
         actions={
           <Button
             leftIcon={<Icon as={FiRefreshCw} />}
@@ -381,7 +381,7 @@ const Payments = () => {
       {loading && !report ? (
         <Flex minH="240px" align="center" justify="center" direction="column" gap={3}>
           <Spinner color="blue.500" />
-          <Text color="gray.600">Loading commission ledger…</Text>
+          <Text color="gray.600">Loading finance records…</Text>
         </Flex>
       ) : (
         <Tabs colorScheme="blue" variant="enclosed" isLazy defaultIndex={0}>
@@ -393,7 +393,7 @@ const Payments = () => {
                 <Badge ml={1} colorScheme="orange">{pendingSchoolInvoices.length} EFT</Badge>
               ) : null}
             </Tab>
-            <Tab whiteSpace="nowrap">Commissions</Tab>
+            <Tab whiteSpace="nowrap">Finance</Tab>
           </TabList>
           <TabPanels>
             <TabPanel px={0} pt={5}>
@@ -491,6 +491,8 @@ const Payments = () => {
                             <Td>
                               {subscription?.billing_provider === "stripe"
                                 ? "Card · Stripe"
+                                : subscription?.billing_provider === "paystack"
+                                  ? "One-time · Paystack"
                                 : subscription?.billing_provider === "bank_transfer"
                                   ? "Invoice · EFT"
                                   : "—"}
@@ -686,6 +688,200 @@ const Payments = () => {
 
           <Card borderRadius="2xl" border="1px solid" borderColor="gray.100">
             <CardBody>
+              <Heading size="md" mb={4}>Owner subscriptions</Heading>
+              {(report?.subscriptions || []).length ? (
+                <TableContainer>
+                  <Table size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th>Fleet owner</Th>
+                        <Th>Plan</Th>
+                        <Th>Provider</Th>
+                        <Th>Status</Th>
+                        <Th>Period ends</Th>
+                        <Th isNumeric>Amount</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {report.subscriptions.map((subscription) => (
+                        <Tr key={subscription.id}>
+                          <Td>
+                            <Text fontWeight="700">{subscription.owner_name}</Text>
+                            <Text fontSize="xs" color="gray.500">
+                              {subscription.owner_email || "No billing email"}
+                            </Text>
+                          </Td>
+                          <Td>{subscription.plan_name} · {subscription.billing_interval}</Td>
+                          <Td>
+                            {subscription.payment_provider === "paystack"
+                              ? "One-time · Paystack"
+                              : "Stripe"}
+                          </Td>
+                          <Td>
+                            <Badge colorScheme={subscription.overdue ? "red" : getSubscriptionBadge(subscription.status).colorScheme}>
+                              {subscription.overdue ? "Overdue" : getSubscriptionBadge(subscription.status).label}
+                            </Badge>
+                          </Td>
+                          <Td>{formatDate(subscription.current_period_end)}</Td>
+                          <Td isNumeric>{formatMoney(subscription.amount_cents, subscription.currency)}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Text color="gray.500">No owner subscriptions found.</Text>
+              )}
+              <Heading size="sm" mt={6} mb={3}>Subscription invoices</Heading>
+              {(report?.subscription_invoices || []).length ? (
+                <TableContainer>
+                  <Table size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th>Fleet owner</Th>
+                        <Th>Period</Th>
+                        <Th>Due date</Th>
+                        <Th>Status</Th>
+                        <Th isNumeric>Amount due</Th>
+                        <Th>Invoice</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {report.subscription_invoices.map((invoice) => (
+                        <Tr key={invoice.stripe_invoice_id}>
+                          <Td>{invoice.owner_name}</Td>
+                          <Td>{formatDate(invoice.period_start)} – {formatDate(invoice.period_end)}</Td>
+                          <Td>{formatDate(invoice.due_at)}</Td>
+                          <Td>
+                            <Badge colorScheme={invoice.overdue ? "red" : getInvoiceBadge(invoice.status).colorScheme}>
+                              {invoice.overdue ? "Overdue" : getInvoiceBadge(invoice.status).label}
+                            </Badge>
+                          </Td>
+                          <Td isNumeric>{formatMoney(invoice.amount_due_cents, invoice.currency)}</Td>
+                          <Td>
+                            {invoice.hosted_invoice_url ? (
+                              <Button as="a" href={invoice.hosted_invoice_url} target="_blank" rel="noreferrer" size="xs" variant="link" colorScheme="blue">
+                                Open
+                              </Button>
+                            ) : "—"}
+                          </Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Text color="gray.500" fontSize="sm">
+                  Invoice records will appear as Stripe billing events are received.
+                </Text>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card borderRadius="2xl" border="1px solid" borderColor="gray.100">
+            <CardBody>
+              <Heading size="md" mb={4}>Client transport fares</Heading>
+              {(report?.client_fares || []).length ? (
+                <TableContainer>
+                  <Table size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th>Client</Th>
+                        <Th>Fleet owner</Th>
+                        <Th>Method</Th>
+                        <Th>Provider</Th>
+                        <Th>Due date</Th>
+                        <Th>Status</Th>
+                        <Th isNumeric>Fare</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {report.client_fares.map((payment) => (
+                        <Tr key={payment.id}>
+                          <Td>
+                            <Text fontWeight="700">{payment.client_name}</Text>
+                            <Text fontSize="xs" color="gray.500">{payment.client_email || "No email"}</Text>
+                          </Td>
+                          <Td>{payment.owner_name}</Td>
+                          <Td textTransform="capitalize">{payment.payment_method}</Td>
+                          <Td>
+                            {payment.payment_provider === "paystack"
+                              ? "Paystack"
+                              : payment.payment_method === "cash"
+                                ? "Cash"
+                                : "Stripe"}
+                          </Td>
+                          <Td>{formatDate(payment.due_at)}</Td>
+                          <Td>
+                            <Badge colorScheme={payment.overdue ? "red" : payment.status === "paid" ? "green" : "orange"}>
+                              {payment.overdue ? "Overdue" : payment.status}
+                            </Badge>
+                          </Td>
+                          <Td isNumeric>{formatMoney(payment.amount_cents, payment.currency)}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Text color="gray.500">No client transport fares recorded.</Text>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card borderRadius="2xl" border="1px solid" borderColor="gray.100">
+            <CardBody>
+              <Heading size="md" mb={2}>Client service fees</Heading>
+              <Text color="gray.500" fontSize="sm" mb={4}>
+                R5 per child, charged to the client. These fees are not owner commission debt.
+              </Text>
+              {(report?.client_service_fees || []).length ? (
+                <TableContainer>
+                  <Table size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th>Client</Th>
+                        <Th>Fleet owner</Th>
+                        <Th>Fare method</Th>
+                        <Th>Provider</Th>
+                        <Th>Due date</Th>
+                        <Th>Status</Th>
+                        <Th isNumeric>Service fee</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {report.client_service_fees.map((fee) => (
+                        <Tr key={fee.id}>
+                          <Td>{fee.client_name}</Td>
+                          <Td>{fee.owner_name}</Td>
+                          <Td textTransform="capitalize">{fee.payment_method}</Td>
+                          <Td>
+                            {fee.payment_provider === "paystack"
+                              ? "Paystack"
+                              : fee.payment_method === "cash"
+                                ? "Cash"
+                                : "Stripe"}
+                          </Td>
+                          <Td>{formatDate(fee.due_at)}</Td>
+                          <Td>
+                            <Badge colorScheme={fee.overdue ? "red" : fee.status === "paid" ? "green" : "orange"}>
+                              {fee.overdue ? "Overdue" : fee.status}
+                            </Badge>
+                          </Td>
+                          <Td isNumeric>{formatMoney(fee.amount_cents, fee.currency)}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Text color="gray.500">No client service fees recorded.</Text>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card borderRadius="2xl" border="1px solid" borderColor="gray.100">
+            <CardBody>
               <Flex
                 justify="space-between"
                 align={{ base: "stretch", md: "center" }}
@@ -694,18 +890,18 @@ const Payments = () => {
                 mb={4}
               >
                 <Box>
-                  <Heading size="md">Fleet owners owing</Heading>
+                  <Heading size="md">Legacy owner fees owing</Heading>
                   <Text color="gray.500" fontSize="sm" mt={1}>
-                    Outstanding 5% fees on confirmed cash payments.
+                    Only outstanding balances from the previous owner-billed cash-fee policy.
                   </Text>
                 </Box>
                 <Input
                   maxW={{ base: "100%", md: "320px" }}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search fleet owner or email..."
+                  placeholder="Search legacy owner balance or email..."
                   bg="white"
-                  aria-label="Search fleet owners"
+                  aria-label="Search legacy owner balances"
                 />
               </Flex>
               {owners.length ? (
@@ -745,8 +941,8 @@ const Payments = () => {
               ) : (
                 <Text py={6} color="gray.500" textAlign="center">
                   {search
-                    ? "No fleet owners match your search."
-                    : "No outstanding cash commissions."}
+                    ? "No owners match your search."
+                    : "No outstanding legacy owner fees."}
                 </Text>
               )}
             </CardBody>
@@ -755,9 +951,9 @@ const Payments = () => {
           <Card borderRadius="2xl" border="1px solid" borderColor="gray.100">
             <CardBody>
               <Box mb={4}>
-                <Heading size="md">Commission invoices</Heading>
+                <Heading size="md">Owner cash-commission invoices</Heading>
                 <Text color="gray.500" fontSize="sm" mt={1}>
-                  Monthly invoices sent to fleet owners for cash commissions.
+                  Owner-confirmed cash-payment fees appear here; client-paid service fees are not billed to owners.
                 </Text>
               </Box>
               {invoices.length ? (
@@ -769,6 +965,7 @@ const Payments = () => {
                         <Th>Period</Th>
                         <Th>Due date</Th>
                         <Th>Status</Th>
+                        <Th>Provider</Th>
                         <Th isNumeric>Amount</Th>
                       </Tr>
                     </Thead>
@@ -794,6 +991,11 @@ const Payments = () => {
                                 {badge.label}
                               </Badge>
                             </Td>
+                            <Td>
+                              {invoice.payment_provider === "paystack"
+                                ? "Paystack"
+                                : "Stripe"}
+                            </Td>
                             <Td isNumeric fontWeight="700">
                               {formatMoney(invoice.amount_cents, invoice.currency)}
                             </Td>
@@ -805,7 +1007,7 @@ const Payments = () => {
                 </TableContainer>
               ) : (
                 <Text py={6} color="gray.500" textAlign="center">
-                  No commission invoices have been generated yet.
+                  No owner cash-commission invoices have been generated.
                 </Text>
               )}
             </CardBody>

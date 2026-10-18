@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Accordion,
   AccordionButton,
@@ -16,6 +16,7 @@ import {
   CardBody,
   Flex,
   HStack,
+  Image,
   Icon,
   Input,
   InputGroup,
@@ -29,26 +30,41 @@ import {
   Select,
   SimpleGrid,
   Spinner,
+  Table,
+  TableContainer,
+  Tbody,
+  Td,
+  Th,
+  Thead,
   Text,
-  Textarea,
+  Tr,
   VStack,
   useDisclosure,
 } from "@chakra-ui/react";
 import {
-  FiFileText,
+  FiBookOpen,
+  FiBriefcase,
+  FiCalendar,
+  FiChevronLeft,
+  FiChevronRight,
+  FiHome,
+  FiInfo,
   FiMessageCircle,
-  FiMic,
-  FiPaperclip,
+  FiMapPin,
   FiRefreshCw,
   FiSearch,
-  FiSend,
-  FiSmile,
-  FiSquare,
+  FiEye,
+  FiTruck,
+  FiUser,
   FiUsers,
 } from "react-icons/fi";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import PageHeader from "./PageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
+import {
+  getCurrentUserIds,
+  isCurrentUserId,
+} from "../../utils/currentUserIdentity";
 
 const API_URL = (
   process.env.REACT_APP_API_URL ||
@@ -56,8 +72,6 @@ const API_URL = (
     ? "http://localhost:4000"
     : "https://track-my-kid-server-production.up.railway.app")
 ).replace(/\/$/, "");
-
-const EMOJI_OPTIONS = ["😀", "😊", "👍", "❤️", "🙏", "🎉", "👋", "🚗", "✅", "🤝"];
 
 const apiRequest = async (path, options = {}) => {
   const token = localStorage.getItem("token");
@@ -94,113 +108,399 @@ const displayRole = (user) => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
-const attachmentFromMessage = (content) => {
-  try {
-    const value = JSON.parse(content);
-    return value?.type === "attachment" && value.url ? value : null;
-  } catch {
-    return null;
+const roleColorScheme = (role) => {
+  const normalizedRole = role.toLowerCase();
+  if (normalizedRole.includes("owner") && normalizedRole.includes("driver")) {
+    return "teal";
   }
+  if (normalizedRole.includes("owner")) return "purple";
+  if (normalizedRole.includes("driver")) return "cyan";
+  if (normalizedRole.includes("client")) return "orange";
+  if (normalizedRole.includes("student")) return "green";
+  if (normalizedRole.includes("parent")) return "blue";
+  if (normalizedRole.includes("school")) return "pink";
+  if (normalizedRole.includes("admin")) return "red";
+  return "gray";
 };
 
-const UserCard = ({ user, onMessage, isSelf, schoolName }) => {
-  const membership = user.schools?.find((school) => school.name === schoolName) || user.school;
+const SchoolCommunityTable = ({
+  schoolName,
+  members,
+  currentUserIds,
+  onMessage,
+  onViewDetails,
+  onViewPhoto,
+}) => {
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
+  const pageCount = Math.max(1, Math.ceil(members.length / pageSize));
+  const pageMembers = members.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, pageCount));
+  }, [pageCount]);
+
   return (
-  <Card border="1px solid" borderColor="gray.100" shadow="sm">
-    <CardBody>
-      <Flex justify="space-between" align="flex-start" gap={3}>
-        <HStack minW={0} spacing={3}>
-          <Avatar name={user.name || user.email} size="sm" />
-          <Box minW={0}>
-            <Text fontWeight="700" noOfLines={1}>
-              {user.name || "Unnamed user"}
-            </Text>
-            <Text fontSize="sm" color="gray.500" noOfLines={1}>
-              {user.email}
-            </Text>
-          </Box>
-        </HStack>
-        <Badge colorScheme={user.status === "active" ? "green" : "gray"}>
-          {user.status || "active"}
+    <Box
+      border="1px solid"
+      borderColor="gray.200"
+      borderRadius="xl"
+      bg="white"
+      overflow="hidden"
+    >
+      <Flex
+        justify="space-between"
+        align={{ base: "flex-start", sm: "center" }}
+        direction={{ base: "column", sm: "row" }}
+        gap={2}
+        p={4}
+        borderBottom="1px solid"
+        borderColor="gray.100"
+      >
+        <Box>
+          <Text fontWeight="700" color="gray.800">
+            {schoolName} users
+          </Text>
+          <Text fontSize="sm" color="gray.500">
+            School staff accounts and their access status.
+          </Text>
+        </Box>
+        <Badge colorScheme="purple" borderRadius="full" px={3} py={1}>
+          {members.length} {members.length === 1 ? "user" : "users"}
         </Badge>
       </Flex>
-      <Flex justify="space-between" align="center" gap={3} mt={4}>
-        <Box minW={0}>
-          <Text fontSize="xs" color="gray.500">
-            {displayRole(user)}
+      <TableContainer>
+        <Table size="sm" variant="simple">
+          <Thead bg="gray.50">
+            <Tr>
+              <Th>User</Th>
+              <Th>Role / School</Th>
+              <Th>Status</Th>
+              <Th>Verification</Th>
+              <Th textAlign="right">Actions</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {pageMembers.map((user) => {
+              const isSelf =
+                user.is_current_user ||
+                isCurrentUserId(user.id, currentUserIds);
+              const membership = user.schools?.find(
+                (school) => school.name === schoolName,
+              );
+              return (
+                <Tr key={`${schoolName}-${user.id}`} _hover={{ bg: "blue.50" }}>
+                  <Td minW="240px">
+                    <HStack spacing={3}>
+                      {user.avatar ? (
+                        <Box
+                          as="button"
+                          type="button"
+                          aria-label={`View ${user.name || user.email}'s profile photo`}
+                          onClick={() => onViewPhoto(user)}
+                          borderRadius="full"
+                          cursor="zoom-in"
+                        >
+                          <Avatar
+                            name={user.name || user.email}
+                            src={user.avatar}
+                            size="sm"
+                          />
+                        </Box>
+                      ) : (
+                        <Avatar name={user.name || user.email} size="sm" />
+                      )}
+                      <Box minW={0}>
+                        <HStack spacing={2}>
+                          <Text fontWeight="600" noOfLines={1}>
+                            {user.name || "Unnamed user"}
+                          </Text>
+                          {isSelf ? (
+                            <Badge colorScheme="blue">You</Badge>
+                          ) : null}
+                        </HStack>
+                        <Text fontSize="sm" color="gray.500" noOfLines={1}>
+                          {user.email || user.phone || "No contact details"}
+                        </Text>
+                      </Box>
+                    </HStack>
+                  </Td>
+                  <Td minW="150px">
+                    <Text fontSize="sm" color="gray.700">
+                      {membership?.staffRole || displayRole(user)}
+                    </Text>
+                    <Text fontSize="xs" color="gray.500">
+                      {schoolName}
+                    </Text>
+                  </Td>
+                  <Td>
+                    <Badge
+                      colorScheme={user.status === "active" ? "green" : "gray"}
+                      textTransform="capitalize"
+                    >
+                      {user.status || "active"}
+                    </Badge>
+                  </Td>
+                  <Td>
+                    <Badge colorScheme={user.is_verified ? "green" : "gray"}>
+                      {user.is_verified ? "Verified" : "Not verified"}
+                    </Badge>
+                  </Td>
+                  <Td>
+                    <HStack justify="flex-end" spacing={1}>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        leftIcon={<Icon as={FiEye} />}
+                        onClick={() => onViewDetails(user)}
+                      >
+                        Details
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        colorScheme="blue"
+                        leftIcon={<Icon as={FiMessageCircle} />}
+                        onClick={() => onMessage(user)}
+                        isDisabled={!user.id || isSelf}
+                      >
+                        Message
+                      </Button>
+                    </HStack>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </Tbody>
+        </Table>
+      </TableContainer>
+      <Flex
+        align="center"
+        justify="space-between"
+        gap={3}
+        p={4}
+        borderTop="1px solid"
+        borderColor="gray.100"
+        wrap="wrap"
+      >
+        <Text fontSize="sm" color="gray.500">
+          Showing {(page - 1) * pageSize + 1}–
+          {Math.min(page * pageSize, members.length)} of {members.length} users
+        </Text>
+        <HStack spacing={2}>
+          <Button
+            size="sm"
+            variant="outline"
+            leftIcon={<Icon as={FiChevronLeft} />}
+            onClick={() =>
+              setPage((currentPage) => Math.max(1, currentPage - 1))
+            }
+            isDisabled={page <= 1}
+          >
+            Previous
+          </Button>
+          <Text fontSize="sm" color="gray.600">
+            Page {page} of {pageCount}
           </Text>
-          {membership ? (
-            <Text fontSize="xs" color="gray.500" noOfLines={1}>
-              {membership.staffRole} · {membership.name}
-            </Text>
-          ) : user.organization ? (
-            <Text fontSize="xs" color="gray.500" noOfLines={1}>
-              {user.organization}
-            </Text>
-          ) : null}
-        </Box>
-        <Button
-          size="sm"
-          colorScheme="blue"
-          variant="outline"
-          leftIcon={<Icon as={FiMessageCircle} />}
-          onClick={() => onMessage(user)}
-          isDisabled={!user.id || isSelf}
-        >
-          Message
-        </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            rightIcon={<Icon as={FiChevronRight} />}
+            onClick={() =>
+              setPage((currentPage) => Math.min(pageCount, currentPage + 1))
+            }
+            isDisabled={page >= pageCount}
+          >
+            Next
+          </Button>
+        </HStack>
       </Flex>
-    </CardBody>
-  </Card>
+    </Box>
+  );
+};
+
+const formatDetailLabel = (key) =>
+  key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const formatDetailValue = (key, value) => {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === null || value === undefined || value === "")
+    return "Not provided";
+  if (
+    typeof value === "string" &&
+    /(?:_at|_date)$/.test(key) &&
+    !Number.isNaN(Date.parse(value))
+  ) {
+    return new Date(value).toLocaleString();
+  }
+  if (typeof value === "number" && key === "per_child_amount_cents") {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "ZAR",
+    }).format(value / 100);
+  }
+  return String(value);
+};
+
+const getUserDetailIcon = (title) => {
+  if (title.includes("Children")) return FiUsers;
+  if (title.includes("Driver")) return FiTruck;
+  if (title.includes("Fleet owner")) return FiBriefcase;
+  if (title.includes("School")) return FiBookOpen;
+  if (title.includes("Parent") || title.includes("Account")) return FiUser;
+  if (title.includes("Date")) return FiCalendar;
+  if (title.includes("Organization")) return FiHome;
+  return FiInfo;
+};
+
+const UserDetailSection = ({ title, data }) => {
+  const details = Object.entries(data || {}).filter(
+    ([key, value]) =>
+      !/^(id|.*_id)$/i.test(key) &&
+      value !== null &&
+      value !== undefined &&
+      value !== "",
+  );
+  if (!details.length) return null;
+
+  return (
+    <Box
+      border="1px solid"
+      borderColor="gray.200"
+      borderRadius="xl"
+      p={{ base: 4, md: 5 }}
+      bg="white"
+      boxShadow="sm"
+    >
+      <HStack mb={4} spacing={3}>
+        <Flex
+          align="center"
+          justify="center"
+          boxSize={9}
+          borderRadius="lg"
+          bg="blue.50"
+          color="blue.600"
+          flexShrink={0}
+        >
+          <Icon as={getUserDetailIcon(title)} />
+        </Flex>
+        <Text fontWeight="700" color="gray.800">
+          {title}
+        </Text>
+      </HStack>
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+        {details.map(([key, value]) => (
+          <Box
+            key={key}
+            minW={0}
+            borderRadius="lg"
+            bg="gray.50"
+            px={3}
+            py={2.5}
+          >
+            <Text
+              fontSize="xs"
+              color="gray.500"
+              textTransform="uppercase"
+              letterSpacing="wide"
+            >
+              {formatDetailLabel(key)}
+            </Text>
+            <Text fontSize="sm" mt={1} color="gray.800" wordBreak="break-word">
+              {formatDetailValue(key, value)}
+            </Text>
+          </Box>
+        ))}
+      </SimpleGrid>
+    </Box>
   );
 };
 
 const Users = () => {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const location = useLocation();
+  const { isOpen, onClose, onOpen } = useDisclosure();
+  const {
+    isOpen: isPhotoOpen,
+    onClose: onPhotoClose,
+    onOpen: onPhotoOpen,
+  } = useDisclosure();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [verificationFilter, setVerificationFilter] = useState("all");
+  const [otherUsersPage, setOtherUsersPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [conversationId, setConversationId] = useState("");
-  const [messages, setMessages] = useState([]);
-  const [draft, setDraft] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [conversationLoading, setConversationLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [messageError, setMessageError] = useState("");
-  const [emojiOpen, setEmojiOpen] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recordingSupported, setRecordingSupported] = useState(false);
-  const fileInputRef = useRef(null);
-  const recorderRef = useRef(null);
-  const streamRef = useRef(null);
-  const messagesEndRef = useRef(null);
-  const currentUserId = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "null")?.id;
-    } catch {
-      return null;
-    }
-  }, []);
+  const currentUserIds = useMemo(getCurrentUserIds, []);
+  const currentUserId = useMemo(
+    () => currentUserIds.values().next().value || null,
+    [currentUserIds],
+  );
   const cacheScope = `admin:${currentUserId || "unknown"}`;
+  const [unlinkedChildren, setUnlinkedChildren] = useState(() => {
+    const cached = readMessageCache(`${cacheScope}:unlinked-children`);
+    return Array.isArray(cached) ? cached : [];
+  });
+  const [unlinkedChildrenLoading, setUnlinkedChildrenLoading] = useState(true);
+  const [unlinkedChildrenError, setUnlinkedChildrenError] = useState("");
+  const [showUnlinkedChildren, setShowUnlinkedChildren] = useState(false);
+  const [unlinkedChildrenPage, setUnlinkedChildrenPage] = useState(1);
+  const [linkedChildren, setLinkedChildren] = useState(() => {
+    const cached = readMessageCache(`${cacheScope}:linked-children`);
+    return Array.isArray(cached) ? cached : [];
+  });
+  const [linkedChildrenLoading, setLinkedChildrenLoading] = useState(true);
+  const [linkedChildrenError, setLinkedChildrenError] = useState("");
+  const [showLinkedChildren, setShowLinkedChildren] = useState(false);
+  const [linkedChildrenPage, setLinkedChildrenPage] = useState(1);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedPhotoUser, setSelectedPhotoUser] = useState(null);
   const [users, setUsers] = useState(() => {
     const cached = readMessageCache(`${cacheScope}:users`);
     return Array.isArray(cached) ? cached : [];
   });
+  const studentPageSize = 6;
+  const unlinkedChildrenPageCount = Math.max(
+    1,
+    Math.ceil(unlinkedChildren.length / studentPageSize),
+  );
+  const linkedChildrenPageCount = Math.max(
+    1,
+    Math.ceil(linkedChildren.length / studentPageSize),
+  );
+  const paginatedUnlinkedChildren = unlinkedChildren.slice(
+    (unlinkedChildrenPage - 1) * studentPageSize,
+    unlinkedChildrenPage * studentPageSize,
+  );
+  const paginatedLinkedChildren = linkedChildren.slice(
+    (linkedChildrenPage - 1) * studentPageSize,
+    linkedChildrenPage * studentPageSize,
+  );
 
   useEffect(() => {
-    if (users.length) writeMessageCache(`${cacheScope}:users`, users);
+    setUnlinkedChildrenPage((page) =>
+      Math.min(page, unlinkedChildrenPageCount),
+    );
+  }, [unlinkedChildrenPageCount]);
+
+  useEffect(() => {
+    setLinkedChildrenPage((page) => Math.min(page, linkedChildrenPageCount));
+  }, [linkedChildrenPageCount]);
+
+  useEffect(() => {
+    writeMessageCache(`${cacheScope}:users`, users);
   }, [cacheScope, users]);
 
   useEffect(() => {
-    if (conversationId && messages.length) {
-      writeMessageCache(`${cacheScope}:messages:${conversationId}`, messages);
-    }
-  }, [cacheScope, conversationId, messages]);
+    writeMessageCache(`${cacheScope}:unlinked-children`, unlinkedChildren);
+  }, [cacheScope, unlinkedChildren]);
+
+  useEffect(() => {
+    writeMessageCache(`${cacheScope}:linked-children`, linkedChildren);
+  }, [cacheScope, linkedChildren]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -216,37 +516,45 @@ const Users = () => {
     }
   }, []);
 
-  const loadMessages = useCallback(async (id) => {
-    if (!id) return;
+  const loadUnlinkedChildren = useCallback(async () => {
+    setUnlinkedChildrenLoading(true);
+    setUnlinkedChildrenError("");
     try {
-      const result = await apiRequest(
-        `/admin/user-conversations/${encodeURIComponent(id)}/messages`,
-      );
-      setMessages(Array.isArray(result) ? result : []);
+      const result = await apiRequest("/admin/unlinked-children");
+      setUnlinkedChildren(Array.isArray(result) ? result : []);
     } catch (requestError) {
-      console.error("Could not refresh user conversation:", requestError);
-      setMessageError(requestError.message);
+      console.error(
+        "Could not load children without linked parents:",
+        requestError,
+      );
+      setUnlinkedChildrenError(requestError.message);
+    } finally {
+      setUnlinkedChildrenLoading(false);
+    }
+  }, []);
+
+  const loadLinkedChildren = useCallback(async () => {
+    setLinkedChildrenLoading(true);
+    setLinkedChildrenError("");
+    try {
+      const result = await apiRequest("/admin/linked-children");
+      setLinkedChildren(Array.isArray(result) ? result : []);
+    } catch (requestError) {
+      console.error(
+        "Could not load students with linked parents:",
+        requestError,
+      );
+      setLinkedChildrenError(requestError.message);
+    } finally {
+      setLinkedChildrenLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadUsers();
-    setRecordingSupported(
-      typeof window !== "undefined" &&
-        Boolean(navigator.mediaDevices?.getUserMedia) &&
-        typeof window.MediaRecorder !== "undefined",
-    );
-  }, [loadUsers]);
-
-  useEffect(() => {
-    if (!isOpen || !conversationId) return undefined;
-    const timer = window.setInterval(() => loadMessages(conversationId), 5000);
-    return () => window.clearInterval(timer);
-  }, [conversationId, isOpen, loadMessages]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    void loadUsers();
+    void loadUnlinkedChildren();
+    void loadLinkedChildren();
+  }, [loadLinkedChildren, loadUnlinkedChildren, loadUsers]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const systemUsers = users.filter((user) => user.role !== "platform_admin");
@@ -271,6 +579,9 @@ const Users = () => {
         (roleFilter === "client" && user.hasClientProfile) ||
         (roleFilter === "school" && Boolean(user.schools?.length))) &&
       (statusFilter === "all" || user.status === statusFilter) &&
+      (verificationFilter === "all" ||
+        (verificationFilter === "verified" && user.is_verified === true) ||
+        (verificationFilter === "not_verified" && user.is_verified !== true)) &&
       searchable.includes(normalizedSearch)
     );
   });
@@ -291,266 +602,114 @@ const Users = () => {
     return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [filteredUsers]);
   const otherUsers = filteredUsers.filter((user) => !user.schools?.length);
-
-  const openConversation = useCallback(async (user) => {
-    setSelectedUser(user);
-    const cachedConversationId = readMessageCache(
-      `${cacheScope}:conversation:${user.id}`,
-    );
-    setConversationId(cachedConversationId || "");
-    setMessages(
-      cachedConversationId
-        ? readMessageCache(`${cacheScope}:messages:${cachedConversationId}`) || []
-        : [],
-    );
-    setDraft("");
-    setMessageError("");
-    setConversationLoading(true);
-    onOpen();
-    try {
-      const result = await apiRequest(
-        `/admin/users/${encodeURIComponent(user.id)}/conversation`,
-        { method: "POST", body: JSON.stringify({}) },
-      );
-      writeMessageCache(`${cacheScope}:conversation:${user.id}`, result.conversationId);
-      setConversationId(result.conversationId);
-      await loadMessages(result.conversationId);
-    } catch (requestError) {
-      console.error("Could not open user conversation:", requestError);
-      setMessageError(requestError.message);
-    } finally {
-      setConversationLoading(false);
-    }
-  }, [cacheScope, loadMessages, onOpen]);
+  const otherUserRoleCounts = Object.entries(
+    otherUsers.reduce((counts, user) => {
+      const role = displayRole(user);
+      counts[role] = (counts[role] || 0) + 1;
+      return counts;
+    }, {}),
+  ).sort(([firstRole], [secondRole]) => firstRole.localeCompare(secondRole));
+  const otherUsersPageSize = 10;
+  const otherUsersPageCount = Math.max(
+    1,
+    Math.ceil(otherUsers.length / otherUsersPageSize),
+  );
+  const paginatedOtherUsers = otherUsers.slice(
+    (otherUsersPage - 1) * otherUsersPageSize,
+    otherUsersPage * otherUsersPageSize,
+  );
 
   useEffect(() => {
-    const targetUserId = location.state?.openConversationUserId;
-    if (!targetUserId || loading) return;
-    const user = users.find((item) => String(item.id) === String(targetUserId));
-    if (!user) return;
-    navigate(location.pathname, { replace: true, state: null });
-    void openConversation(user);
-  }, [loading, location.pathname, location.state, navigate, openConversation, users]);
+    setOtherUsersPage(1);
+  }, [normalizedSearch, roleFilter, statusFilter, verificationFilter]);
 
-  const sendContent = async (content) => {
-    if (!content.trim() || !conversationId) return;
-    setSending(true);
-    setMessageError("");
-    try {
-      const sent = await apiRequest(
-        `/admin/user-conversations/${encodeURIComponent(conversationId)}/messages`,
-        { method: "POST", body: JSON.stringify({ content }) },
-      );
-      setMessages((current) => [...current, sent]);
-      setDraft("");
-    } catch (requestError) {
-      console.error("Could not send user message:", requestError);
-      setMessageError(requestError.message);
-    } finally {
-      setSending(false);
-    }
-  };
+  useEffect(() => {
+    setOtherUsersPage((page) => Math.min(page, otherUsersPageCount));
+  }, [otherUsersPageCount]);
 
-  const sendText = async (event) => {
-    event.preventDefault();
-    if ((!draft.trim() && !selectedFile) || !conversationId) return;
-    if (selectedFile) {
-      await uploadAttachment(selectedFile, draft.trim());
-      return;
-    }
-    await sendContent(draft.trim());
-  };
-
-  const uploadAttachment = async (file, caption = "") => {
-    if (!file || !conversationId) return;
-    if (
-      !file.type.startsWith("image/") &&
-      file.type !== "application/pdf" &&
-      !file.type.startsWith("audio/")
-    ) {
-      setMessageError("Choose an image, PDF, or audio recording.");
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      setMessageError("Attachments must be 20 MB or smaller.");
-      return;
-    }
-    setSending(true);
-    setMessageError("");
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const attachment = await apiRequest(
-        `/admin/user-conversations/${encodeURIComponent(conversationId)}/attachments`,
-        { method: "POST", body: formData },
-      );
-      const sent = await apiRequest(
-        `/admin/user-conversations/${encodeURIComponent(conversationId)}/messages`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            content: JSON.stringify({
-              type: "attachment",
-              ...attachment,
-              caption,
-            }),
-          }),
+  const openConversation = useCallback(
+    (user) => {
+      navigate("/messages", {
+        state: {
+          openConversationUserId: user.id,
+          openConversationRole: user.role,
         },
-      );
-      setMessages((current) => [...current, sent]);
-      setDraft("");
-      setSelectedFile(null);
-    } catch (requestError) {
-      console.error("Could not upload message attachment:", requestError);
-      setMessageError(requestError.message);
-    } finally {
-      setSending(false);
-    }
+      });
+    },
+    [navigate],
+  );
+
+  const openUserDetails = (user) => {
+    setSelectedUser(user);
+    onOpen();
   };
 
-  const startVoiceNote = async () => {
-    setMessageError("");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const recorder = new window.MediaRecorder(stream);
-      const chunks = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size) chunks.push(event.data);
-      };
-      recorder.onerror = () => {
-        setMessageError("Voice recording failed. Please try again.");
-        setRecording(false);
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      };
-      recorder.onstop = () => {
-        setRecording(false);
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        if (!chunks.length) return;
-        const mimeType = recorder.mimeType || "audio/webm";
-        const extension = mimeType.includes("mp4") ? "m4a" : "webm";
-        const file = new File(chunks, `voice-note-${Date.now()}.${extension}`, {
-          type: mimeType,
-        });
-        uploadAttachment(file);
-      };
-      recorderRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch (requestError) {
-      console.error("Could not start voice recording:", requestError);
-      setMessageError(
-        requestError.name === "NotAllowedError"
-          ? "Microphone access was denied."
-          : "Voice recording could not be started on this device.",
-      );
-    }
-  };
-
-  const stopVoiceNote = () => {
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-  };
-
-  const handleClose = () => {
-    stopVoiceNote();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setRecording(false);
-    setEmojiOpen(false);
-    setSelectedFile(null);
-    onClose();
-  };
-
-  const renderMessage = (message) => {
-    const own = message.sender_id === currentUserId;
-    const attachment = attachmentFromMessage(message.content);
-    return (
-      <Flex key={message.id || `${message.sent_at}-${message.content}`} justify={own ? "flex-end" : "flex-start"}>
-        <Box
-          maxW="82%"
-          bg={own ? "blue.600" : "white"}
-          color={own ? "white" : "gray.800"}
-          border="1px solid"
-          borderColor={own ? "blue.600" : "gray.200"}
-          px={3}
-          py={2}
-          borderRadius="16px"
-          borderBottomRightRadius={own ? "4px" : "16px"}
-          borderBottomLeftRadius={own ? "16px" : "4px"}
-        >
-          {attachment ? (
-            attachment.mediaType === "image" ? (
-              <a href={attachment.url} target="_blank" rel="noreferrer">
-                <Box
-                  as="img"
-                  src={attachment.url}
-                  alt={attachment.name}
-                  maxW="260px"
-                  maxH="240px"
-                  borderRadius="md"
-                />
-              </a>
-            ) : attachment.mediaType === "audio" ? (
-              <Box as="audio" controls src={attachment.url} maxW="260px" />
-            ) : (
-              <Button
-                as="a"
-                href={attachment.url}
-                target="_blank"
-                rel="noreferrer"
-                leftIcon={<Icon as={FiFileText} />}
-                variant="ghost"
-                color={own ? "white" : "blue.600"}
-                maxW="260px"
-                title={attachment.name}
-              >
-                <Text noOfLines={1}>{attachment.name || "Open PDF"}</Text>
-              </Button>
-            )
-          ) : (
-            <Text whiteSpace="pre-wrap" wordBreak="break-word">
-              {message.content}
-            </Text>
-          )}
-          {attachment?.caption ? (
-            <Text whiteSpace="pre-wrap" wordBreak="break-word" mt={2}>
-              {attachment.caption}
-            </Text>
-          ) : null}
-          <Text fontSize="10px" opacity={0.75} textAlign="right" mt={1}>
-            {message.sent_at
-              ? new Date(message.sent_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : ""}
-          </Text>
-        </Box>
-      </Flex>
-    );
+  const openUserPhoto = (user) => {
+    setSelectedPhotoUser(user);
+    onPhotoOpen();
   };
 
   return (
-    <Box>
+    <Box px={{ base: 4, md: 6 }} py={6}>
       <PageHeader
         eyebrow="PLATFORM DIRECTORY"
         title="Users"
-        description="Find system users, browse school communities, and message people directly."
+        description="Browse user accounts, inspect their profile details, and message people directly."
         actions={
-          <Button
-            leftIcon={<Icon as={FiRefreshCw} />}
-            variant="outline"
-            onClick={loadUsers}
-            isLoading={loading}
-          >
-            Refresh
-          </Button>
+          <HStack flexWrap="wrap">
+            <Button
+              leftIcon={<Icon as={FiUsers} />}
+              variant={showUnlinkedChildren ? "solid" : "outline"}
+              colorScheme="purple"
+              onClick={() => {
+                setShowUnlinkedChildren((visible) => !visible);
+                setShowLinkedChildren(false);
+              }}
+            >
+              Unlinked students
+              <Badge
+                ml={2}
+                colorScheme={showUnlinkedChildren ? "whiteAlpha" : "purple"}
+              >
+                {unlinkedChildren.length}
+              </Badge>
+            </Button>
+            <Button
+              leftIcon={<Icon as={FiUsers} />}
+              variant={showLinkedChildren ? "solid" : "outline"}
+              colorScheme="teal"
+              onClick={() => {
+                setShowLinkedChildren((visible) => !visible);
+                setShowUnlinkedChildren(false);
+              }}
+            >
+              Linked students
+              <Badge
+                ml={2}
+                colorScheme={showLinkedChildren ? "whiteAlpha" : "teal"}
+              >
+                {linkedChildren.length}
+              </Badge>
+            </Button>
+            <Button
+              leftIcon={<Icon as={FiRefreshCw} />}
+              variant="outline"
+              onClick={() => {
+                void loadUsers();
+                void loadUnlinkedChildren();
+                void loadLinkedChildren();
+              }}
+              isLoading={
+                loading || unlinkedChildrenLoading || linkedChildrenLoading
+              }
+            >
+              Refresh
+            </Button>
+          </HStack>
         }
         meta={
           <Badge colorScheme="blue" px={3} py={1.5} borderRadius="full">
-              {systemUsers.length} system users
+            {systemUsers.length} system users
           </Badge>
         }
       />
@@ -564,6 +723,422 @@ const Users = () => {
           </Button>
         </Alert>
       ) : null}
+
+      {showUnlinkedChildren && (
+        <Card mb={5} border="1px solid" borderColor="purple.100">
+          <CardBody>
+            <Flex
+              justify="space-between"
+              align={{ base: "flex-start", sm: "center" }}
+              direction={{ base: "column", sm: "row" }}
+              gap={2}
+              mb={4}
+            >
+              <Box>
+                <Text fontWeight="700" color="gray.800">
+                  Students without a linked parent
+                </Text>
+                <Text fontSize="sm" color="gray.500">
+                  Review each student’s school and contact the school to follow
+                  up.
+                </Text>
+              </Box>
+              <Badge colorScheme="purple">
+                {unlinkedChildren.length}{" "}
+                {unlinkedChildren.length === 1 ? "student" : "students"}
+              </Badge>
+            </Flex>
+            {unlinkedChildrenError ? (
+              <Alert status="error" borderRadius="lg" mb={3}>
+                <AlertIcon />
+                <AlertDescription>{unlinkedChildrenError}</AlertDescription>
+                <Button
+                  ml="auto"
+                  size="sm"
+                  onClick={() => void loadUnlinkedChildren()}
+                  isLoading={unlinkedChildrenLoading}
+                >
+                  Try again
+                </Button>
+              </Alert>
+            ) : unlinkedChildrenLoading && !unlinkedChildren.length ? (
+              <Flex justify="center" py={8}>
+                <Spinner color="purple.500" />
+              </Flex>
+            ) : unlinkedChildren.length ? (
+              <>
+                <TableContainer
+                  border="1px solid"
+                  borderColor="gray.200"
+                  borderRadius="lg"
+                  bg="white"
+                >
+                  <Table size="sm" variant="simple">
+                    <Thead bg="gray.50">
+                      <Tr>
+                        <Th>Student</Th>
+                        <Th>Grade</Th>
+                        <Th>School</Th>
+                        <Th>School contact</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {paginatedUnlinkedChildren.map((child) => {
+                        const school = child.schools;
+                        return (
+                          <Tr key={child.id} _hover={{ bg: "purple.50" }}>
+                            <Td minW="220px">
+                              <HStack spacing={3}>
+                                <Avatar
+                                  name={`${child.name || ""} ${child.lastname || ""}`}
+                                  src={child.avatar || undefined}
+                                  size="sm"
+                                />
+                                <Text fontWeight="600">
+                                  {[child.name, child.lastname]
+                                    .filter(Boolean)
+                                    .join(" ") || "Unnamed student"}
+                                </Text>
+                              </HStack>
+                            </Td>
+                            <Td>{child.grade || "Not provided"}</Td>
+                            <Td minW="220px">
+                              <Text fontWeight="600">
+                                {school?.name || "School not linked"}
+                              </Text>
+                              {school?.address ? (
+                                <Text fontSize="xs" color="gray.500">
+                                  {school.address}
+                                  {[school.district, school.province].filter(
+                                    Boolean,
+                                  ).length
+                                    ? ` · ${[school.district, school.province]
+                                        .filter(Boolean)
+                                        .join(", ")}`
+                                    : ""}
+                                </Text>
+                              ) : null}
+                            </Td>
+                            <Td minW="200px">
+                              {school?.contact_person ||
+                              school?.principal_name ? (
+                                <Text fontSize="sm">
+                                  {school.contact_person ||
+                                    school.principal_name}
+                                </Text>
+                              ) : null}
+                              <HStack spacing={3} flexWrap="wrap">
+                                {school?.phone ? (
+                                  <Text
+                                    as="a"
+                                    href={`tel:${school.phone}`}
+                                    fontSize="xs"
+                                    color="blue.600"
+                                  >
+                                    {school.phone}
+                                  </Text>
+                                ) : null}
+                                {school?.school_email ? (
+                                  <Text
+                                    as="a"
+                                    href={`mailto:${school.school_email}`}
+                                    fontSize="xs"
+                                    color="blue.600"
+                                  >
+                                    {school.school_email}
+                                  </Text>
+                                ) : null}
+                                {!school?.phone && !school?.school_email ? (
+                                  <Text fontSize="xs" color="gray.500">
+                                    No contact details
+                                  </Text>
+                                ) : null}
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+                <Flex
+                  align="center"
+                  justify="space-between"
+                  gap={3}
+                  mt={3}
+                  wrap="wrap"
+                >
+                  <Text fontSize="sm" color="gray.500">
+                    Showing {(unlinkedChildrenPage - 1) * studentPageSize + 1}–
+                    {Math.min(
+                      unlinkedChildrenPage * studentPageSize,
+                      unlinkedChildren.length,
+                    )}{" "}
+                    of {unlinkedChildren.length} students
+                  </Text>
+                  <HStack spacing={2}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      leftIcon={<Icon as={FiChevronLeft} />}
+                      onClick={() =>
+                        setUnlinkedChildrenPage((page) => Math.max(1, page - 1))
+                      }
+                      isDisabled={unlinkedChildrenPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <Text fontSize="sm" color="gray.600">
+                      Page {unlinkedChildrenPage} of {unlinkedChildrenPageCount}
+                    </Text>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      rightIcon={<Icon as={FiChevronRight} />}
+                      onClick={() =>
+                        setUnlinkedChildrenPage((page) =>
+                          Math.min(unlinkedChildrenPageCount, page + 1),
+                        )
+                      }
+                      isDisabled={
+                        unlinkedChildrenPage >= unlinkedChildrenPageCount
+                      }
+                    >
+                      Next
+                    </Button>
+                  </HStack>
+                </Flex>
+              </>
+            ) : (
+              <Text color="gray.500" textAlign="center" py={6}>
+                No students without a linked parent were found.
+              </Text>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {showLinkedChildren && (
+        <Card mb={5} border="1px solid" borderColor="teal.100">
+          <CardBody>
+            <Flex
+              justify="space-between"
+              align={{ base: "flex-start", sm: "center" }}
+              direction={{ base: "column", sm: "row" }}
+              gap={2}
+              mb={4}
+            >
+              <Box>
+                <Text fontWeight="700" color="gray.800">
+                  Students with linked parents
+                </Text>
+                <Text fontSize="sm" color="gray.500">
+                  Review each student, their school, and the parent account
+                  linked to them.
+                </Text>
+              </Box>
+              <Badge colorScheme="teal">
+                {linkedChildren.length}{" "}
+                {linkedChildren.length === 1 ? "student" : "students"}
+              </Badge>
+            </Flex>
+            {linkedChildrenError ? (
+              <Alert status="error" borderRadius="lg" mb={3}>
+                <AlertIcon />
+                <AlertDescription>{linkedChildrenError}</AlertDescription>
+                <Button
+                  ml="auto"
+                  size="sm"
+                  onClick={() => void loadLinkedChildren()}
+                  isLoading={linkedChildrenLoading}
+                >
+                  Try again
+                </Button>
+              </Alert>
+            ) : linkedChildrenLoading && !linkedChildren.length ? (
+              <Flex justify="center" py={8}>
+                <Spinner color="teal.500" />
+              </Flex>
+            ) : linkedChildren.length ? (
+              <>
+                <TableContainer
+                  border="1px solid"
+                  borderColor="gray.200"
+                  borderRadius="lg"
+                  bg="white"
+                >
+                  <Table size="sm" variant="simple">
+                    <Thead bg="gray.50">
+                      <Tr>
+                        <Th>Student</Th>
+                        <Th>Grade</Th>
+                        <Th>School</Th>
+                        <Th>Parent</Th>
+                        <Th>Contact</Th>
+                        <Th textAlign="right">Action</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {paginatedLinkedChildren.map((child) => {
+                        const school = child.schools;
+                        const parent = child.clients;
+                        const parentUser = parent?.users;
+                        const parentName =
+                          [parent?.first_name, parent?.last_name]
+                            .filter(Boolean)
+                            .join(" ") ||
+                          parentUser?.name ||
+                          "Parent account";
+                        const parentPhone = parent?.phone || parentUser?.phone;
+                        const parentIsCurrentUser =
+                          parentUser?.is_current_user ||
+                          isCurrentUserId(parentUser?.id, currentUserIds);
+                        return (
+                          <Tr key={child.id} _hover={{ bg: "teal.50" }}>
+                            <Td minW="210px">
+                              <HStack spacing={3}>
+                                <Avatar
+                                  name={`${child.name || ""} ${child.lastname || ""}`}
+                                  src={child.avatar || undefined}
+                                  size="sm"
+                                />
+                                <Text fontWeight="600">
+                                  {[child.name, child.lastname]
+                                    .filter(Boolean)
+                                    .join(" ") || "Unnamed student"}
+                                </Text>
+                              </HStack>
+                            </Td>
+                            <Td>{child.grade || "Not provided"}</Td>
+                            <Td minW="180px">
+                              <Text fontWeight="600">
+                                {school?.name || "School not linked"}
+                              </Text>
+                              {school?.address ? (
+                                <Text fontSize="xs" color="gray.500">
+                                  {school.address}
+                                </Text>
+                              ) : null}
+                            </Td>
+                            <Td minW="180px">
+                              <Text fontWeight="600">{parentName}</Text>
+                              {parentIsCurrentUser ? (
+                                <Badge colorScheme="blue" mt={1}>
+                                  You
+                                </Badge>
+                              ) : null}
+                            </Td>
+                            <Td minW="190px">
+                              {parentPhone ? (
+                                <Text
+                                  as="a"
+                                  href={`tel:${parentPhone}`}
+                                  display="block"
+                                  fontSize="xs"
+                                  color="blue.600"
+                                >
+                                  {parentPhone}
+                                </Text>
+                              ) : null}
+                              {parentUser?.email ? (
+                                <Text
+                                  as="a"
+                                  href={`mailto:${parentUser.email}`}
+                                  display="block"
+                                  fontSize="xs"
+                                  color="blue.600"
+                                >
+                                  {parentUser.email}
+                                </Text>
+                              ) : null}
+                              {!parentPhone && !parentUser?.email ? (
+                                <Text fontSize="xs" color="gray.500">
+                                  No contact details
+                                </Text>
+                              ) : null}
+                            </Td>
+                            <Td textAlign="right">
+                              {parentUser?.id ? (
+                                <Button
+                                  size="xs"
+                                  variant="outline"
+                                  colorScheme="blue"
+                                  onClick={() =>
+                                    openConversation({
+                                      id: parentUser.id,
+                                      role: "client",
+                                    })
+                                  }
+                                  isDisabled={parentIsCurrentUser}
+                                >
+                                  Contact parent
+                                </Button>
+                              ) : (
+                                <Text fontSize="xs" color="gray.500">
+                                  —
+                                </Text>
+                              )}
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+                <Flex
+                  align="center"
+                  justify="space-between"
+                  gap={3}
+                  mt={3}
+                  wrap="wrap"
+                >
+                  <Text fontSize="sm" color="gray.500">
+                    Showing {(linkedChildrenPage - 1) * studentPageSize + 1}–
+                    {Math.min(
+                      linkedChildrenPage * studentPageSize,
+                      linkedChildren.length,
+                    )}{" "}
+                    of {linkedChildren.length} students
+                  </Text>
+                  <HStack spacing={2}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      leftIcon={<Icon as={FiChevronLeft} />}
+                      onClick={() =>
+                        setLinkedChildrenPage((page) => Math.max(1, page - 1))
+                      }
+                      isDisabled={linkedChildrenPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <Text fontSize="sm" color="gray.600">
+                      Page {linkedChildrenPage} of {linkedChildrenPageCount}
+                    </Text>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      rightIcon={<Icon as={FiChevronRight} />}
+                      onClick={() =>
+                        setLinkedChildrenPage((page) =>
+                          Math.min(linkedChildrenPageCount, page + 1),
+                        )
+                      }
+                      isDisabled={linkedChildrenPage >= linkedChildrenPageCount}
+                    >
+                      Next
+                    </Button>
+                  </HStack>
+                </Flex>
+              </>
+            ) : (
+              <Text color="gray.500" textAlign="center" py={6}>
+                No students with linked parents were found.
+              </Text>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       <Flex gap={3} wrap="wrap" mb={5}>
         <InputGroup maxW={{ base: "100%", md: "420px" }}>
@@ -607,6 +1182,17 @@ const Users = () => {
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
         </Select>
+        <Select
+          value={verificationFilter}
+          onChange={(event) => setVerificationFilter(event.target.value)}
+          maxW={{ base: "100%", sm: "200px" }}
+          bg="white"
+          aria-label="Filter users by verification"
+        >
+          <option value="all">All verification</option>
+          <option value="verified">Verified</option>
+          <option value="not_verified">Not verified</option>
+        </Select>
       </Flex>
 
       {loading && !users.length ? (
@@ -624,61 +1210,275 @@ const Users = () => {
                 </Text>
               </HStack>
               <Accordion allowMultiple>
-                {schoolGroups.map(([schoolName, members]) => (
-                  <AccordionItem
-                    key={schoolName}
-                    mb={3}
-                    border="1px solid"
-                    borderColor="gray.200"
-                    borderRadius="xl"
-                    overflow="hidden"
-                  >
-                    <AccordionButton bg="white" py={4}>
-                      <Flex flex="1" justify="space-between" align="center" mr={3}>
-                        <Text fontWeight="700" textAlign="left">
-                          {schoolName}
-                        </Text>
-                        <Badge colorScheme="purple">
-                          {members.length} {members.length === 1 ? "user" : "users"}
-                        </Badge>
-                      </Flex>
-                      <AccordionIcon />
-                    </AccordionButton>
-                    <AccordionPanel bg="gray.50" pt={4}>
-                      <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={3}>
-                        {members.map((user) => (
-                          <UserCard
-                            key={`${schoolName}-${user.id}`}
-                            user={user}
-                            onMessage={openConversation}
-                            isSelf={user.id === currentUserId}
-                            schoolName={schoolName}
-                          />
-                        ))}
-                      </SimpleGrid>
-                    </AccordionPanel>
-                  </AccordionItem>
-                ))}
+                {schoolGroups.map(([schoolName, members]) => {
+                  const school = members[0]?.schools?.find(
+                    (membership) => membership.name === schoolName,
+                  );
+                  return (
+                    <AccordionItem
+                      key={schoolName}
+                      mb={3}
+                      border="1px solid"
+                      borderColor="gray.200"
+                      borderRadius="xl"
+                      overflow="hidden"
+                    >
+                      <AccordionButton bg="white" py={4}>
+                        <Flex
+                          flex="1"
+                          justify="space-between"
+                          align="center"
+                          mr={3}
+                        >
+                          <HStack minW={0} spacing={2}>
+                            {school?.logo ? (
+                              <Avatar
+                                name={schoolName}
+                                src={school.logo}
+                                size="sm"
+                              />
+                            ) : null}
+                            <Text fontWeight="700" textAlign="left">
+                              {schoolName}
+                            </Text>
+                          </HStack>
+                          <Badge colorScheme="purple">
+                            {members.length}{" "}
+                            {members.length === 1 ? "user" : "users"}
+                          </Badge>
+                        </Flex>
+                        <AccordionIcon />
+                      </AccordionButton>
+                      <AccordionPanel bg="gray.50" pt={4}>
+                        <SchoolCommunityTable
+                          schoolName={schoolName}
+                          members={members}
+                          currentUserIds={currentUserIds}
+                          onMessage={openConversation}
+                          onViewDetails={openUserDetails}
+                          onViewPhoto={openUserPhoto}
+                        />
+                      </AccordionPanel>
+                    </AccordionItem>
+                  );
+                })}
               </Accordion>
             </Box>
           ) : null}
           {otherUsers.length ? (
-            <Box>
-              {schoolGroups.length ? (
-                <Text fontWeight="700" color="gray.700" mb={3}>
-                  Other users
+            <Box
+              border="1px solid"
+              borderColor="gray.200"
+              borderRadius="xl"
+              bg="white"
+              overflow="hidden"
+            >
+              <Flex
+                justify="space-between"
+                align={{ base: "flex-start", sm: "center" }}
+                direction={{ base: "column", sm: "row" }}
+                gap={2}
+                p={4}
+                borderBottom="1px solid"
+                borderColor="gray.100"
+              >
+                <Box>
+                  <Text fontWeight="700" color="gray.800">
+                    Other Users
+                  </Text>
+                  <Text fontSize="sm" color="gray.500">
+                    Users not associated with a school
+                  </Text>
+                </Box>
+                <HStack spacing={2} flexWrap="wrap">
+                  <Badge colorScheme="blue" borderRadius="full" px={3} py={1}>
+                    {otherUsers.length}{" "}
+                    {otherUsers.length === 1 ? "user" : "users"}
+                  </Badge>
+                  {otherUserRoleCounts.map(([role, count]) => (
+                    <Badge
+                      key={role}
+                      colorScheme={roleColorScheme(role)}
+                      borderRadius="full"
+                      px={3}
+                      py={1}
+                      fontWeight="500"
+                    >
+                      {role}: {count}
+                    </Badge>
+                  ))}
+                </HStack>
+              </Flex>
+              <TableContainer>
+                <Table size="sm" variant="simple">
+                  <Thead bg="gray.50">
+                    <Tr>
+                      <Th>User</Th>
+                      <Th>Role / Organization</Th>
+                      <Th>Status</Th>
+                      <Th>Verification</Th>
+                      <Th textAlign="right">Actions</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {paginatedOtherUsers.map((user) => {
+                      const isSelf =
+                        user.is_current_user ||
+                        isCurrentUserId(user.id, currentUserIds);
+                      const role = displayRole(user);
+                      const roleColor = roleColorScheme(role);
+                      return (
+                        <Tr
+                          key={user.id}
+                          bg={`${roleColor}.50`}
+                          borderLeft="3px solid"
+                          borderColor={`${roleColor}.400`}
+                          _hover={{ bg: `${roleColor}.100` }}
+                        >
+                          <Td minW="240px">
+                            <HStack spacing={3}>
+                              {user.avatar ? (
+                                <Box
+                                  as="button"
+                                  type="button"
+                                  aria-label={`View ${user.name || user.email}'s profile photo`}
+                                  onClick={() => openUserPhoto(user)}
+                                  borderRadius="full"
+                                  cursor="zoom-in"
+                                >
+                                  <Avatar
+                                    name={user.name || user.email}
+                                    src={user.avatar}
+                                    size="sm"
+                                  />
+                                </Box>
+                              ) : (
+                                <Avatar
+                                  name={user.name || user.email}
+                                  size="sm"
+                                />
+                              )}
+                              <Box minW={0}>
+                                <HStack spacing={2}>
+                                  <Text fontWeight="600" noOfLines={1}>
+                                    {user.name || "Unnamed user"}
+                                  </Text>
+                                  {isSelf ? (
+                                    <Badge colorScheme="blue">You</Badge>
+                                  ) : null}
+                                </HStack>
+                                <Text
+                                  fontSize="sm"
+                                  color="gray.500"
+                                  noOfLines={1}
+                                >
+                                  {user.email ||
+                                    user.phone ||
+                                    "No contact details"}
+                                </Text>
+                              </Box>
+                            </HStack>
+                          </Td>
+                          <Td minW="150px">
+                            <Badge colorScheme={roleColor}>{role}</Badge>
+                            {user.organization ? (
+                              <Text fontSize="xs" color="gray.500">
+                                {user.organization}
+                              </Text>
+                            ) : null}
+                          </Td>
+                          <Td>
+                            <Badge
+                              colorScheme={
+                                user.status === "active" ? "green" : "gray"
+                              }
+                              textTransform="capitalize"
+                            >
+                              {user.status || "active"}
+                            </Badge>
+                          </Td>
+                          <Td>
+                            <Badge
+                              colorScheme={user.is_verified ? "green" : "gray"}
+                            >
+                              {user.is_verified ? "Verified" : "Not verified"}
+                            </Badge>
+                          </Td>
+                          <Td>
+                            <HStack justify="flex-end" spacing={1}>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                leftIcon={<Icon as={FiEye} />}
+                                onClick={() => openUserDetails(user)}
+                              >
+                                Details
+                              </Button>
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                colorScheme="blue"
+                                leftIcon={<Icon as={FiMessageCircle} />}
+                                onClick={() => openConversation(user)}
+                                isDisabled={!user.id || isSelf}
+                              >
+                                Message
+                              </Button>
+                            </HStack>
+                          </Td>
+                        </Tr>
+                      );
+                    })}
+                  </Tbody>
+                </Table>
+              </TableContainer>
+              <Flex
+                align="center"
+                justify="space-between"
+                gap={3}
+                p={4}
+                borderTop="1px solid"
+                borderColor="gray.100"
+                wrap="wrap"
+              >
+                <Text fontSize="sm" color="gray.500">
+                  Showing {(otherUsersPage - 1) * otherUsersPageSize + 1}–
+                  {Math.min(
+                    otherUsersPage * otherUsersPageSize,
+                    otherUsers.length,
+                  )}{" "}
+                  of {otherUsers.length} users
                 </Text>
-              ) : null}
-              <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={4}>
-                {otherUsers.map((user) => (
-                  <UserCard
-                    key={user.id}
-                    user={user}
-                    onMessage={openConversation}
-                    isSelf={user.id === currentUserId}
-                  />
-                ))}
-              </SimpleGrid>
+                <HStack spacing={2}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    leftIcon={<Icon as={FiChevronLeft} />}
+                    onClick={() =>
+                      setOtherUsersPage((page) => Math.max(1, page - 1))
+                    }
+                    isDisabled={otherUsersPage <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <Text fontSize="sm" color="gray.600">
+                    Page {otherUsersPage} of {otherUsersPageCount}
+                  </Text>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    rightIcon={<Icon as={FiChevronRight} />}
+                    onClick={() =>
+                      setOtherUsersPage((page) =>
+                        Math.min(otherUsersPageCount, page + 1),
+                      )
+                    }
+                    isDisabled={otherUsersPage >= otherUsersPageCount}
+                  >
+                    Next
+                  </Button>
+                </HStack>
+              </Flex>
             </Box>
           ) : null}
         </VStack>
@@ -692,166 +1492,845 @@ const Users = () => {
         </Card>
       )}
 
-      <Modal isOpen={isOpen} onClose={handleClose} size="2xl" scrollBehavior="inside">
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        size="3xl"
+        scrollBehavior="inside"
+      >
         <ModalOverlay />
-        <ModalContent h={{ base: "92vh", md: "min(760px, 90vh)" }}>
-          <ModalHeader borderBottom="1px solid" borderColor="gray.100">
+        <ModalContent maxH="90vh">
+          <ModalHeader borderBottom="1px solid" borderColor="gray.100" pr={12}>
             <HStack spacing={3}>
-              <Avatar name={selectedUser?.name || selectedUser?.email} size="sm" />
-              <Box>
-                <Text fontSize="md">{selectedUser?.name || "User conversation"}</Text>
-                <Text fontSize="xs" color="gray.500" fontWeight="normal">
+              <Avatar
+                name={selectedUser?.name || selectedUser?.email}
+                src={selectedUser?.avatar || undefined}
+                size="md"
+              />
+              <Box minW={0}>
+                <Text fontSize="md" noOfLines={1}>
+                  {selectedUser?.name || "User details"}
+                </Text>
+                <Text
+                  fontSize="xs"
+                  color="gray.500"
+                  fontWeight="normal"
+                  noOfLines={1}
+                >
                   {selectedUser?.email}
                 </Text>
               </Box>
+              {selectedUser && (
+                <Badge
+                  ml="auto"
+                  colorScheme={
+                    selectedUser.status === "active" ? "green" : "gray"
+                  }
+                >
+                  {selectedUser.status || "active"}
+                </Badge>
+              )}
+              {selectedUser?.is_current_user ||
+              isCurrentUserId(selectedUser?.id, currentUserIds) ? (
+                <Badge colorScheme="blue">You</Badge>
+              ) : null}
             </HStack>
           </ModalHeader>
           <ModalCloseButton />
-          <ModalBody display="flex" flexDirection="column" p={0} minH={0}>
-            {messageError ? (
-              <Alert status="error" borderRadius={0}>
-                <AlertIcon />
-                <AlertDescription fontSize="sm">{messageError}</AlertDescription>
-              </Alert>
-            ) : null}
-            <VStack
-              align="stretch"
-              spacing={3}
-              flex="1"
-              overflowY="auto"
-              p={{ base: 4, md: 5 }}
-              bg="gray.50"
-            >
-              {conversationLoading && !messages.length ? (
-                <Flex justify="center" py={10}>
-                  <Spinner color="blue.500" />
-                </Flex>
-              ) : messages.length ? (
-                messages.map(renderMessage)
-              ) : (
-                <Text color="gray.500" textAlign="center" py={10} fontSize="sm">
-                  Start a conversation with {selectedUser?.name || "this user"}.
-                </Text>
-              )}
-              <Box ref={messagesEndRef} />
-            </VStack>
-            <Box as="form" onSubmit={sendText} p={3} borderTop="1px solid" borderColor="gray.200">
-              {selectedFile ? (
-                <HStack mb={2} justify="space-between">
-                  <Text fontSize="sm" color="gray.600" noOfLines={1}>
-                    Attachment: {selectedFile.name}
-                  </Text>
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setSelectedFile(null)}
-                    aria-label="Remove selected attachment"
-                  >
-                    Remove
-                  </Button>
-                </HStack>
-              ) : null}
-              <Flex gap={2} align="flex-end">
-                <Textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      event.currentTarget.form?.requestSubmit();
-                    }
+          <ModalBody py={5}>
+            {selectedUser && (
+              <VStack align="stretch" spacing={4}>
+                {selectedUser.avatar ? (
+                  <Box display="flex" justifyContent="center">
+                    <Box
+                      as="button"
+                      type="button"
+                      aria-label={`View ${selectedUser.name || selectedUser.email}'s profile photo`}
+                      onClick={() => openUserPhoto(selectedUser)}
+                      borderRadius="full"
+                      cursor="zoom-in"
+                      _focusVisible={{
+                        outline: "3px solid",
+                        outlineColor: "blue.500",
+                      }}
+                    >
+                      <Avatar
+                        name={selectedUser.name || selectedUser.email}
+                        src={selectedUser.avatar}
+                        size="2xl"
+                      />
+                    </Box>
+                  </Box>
+                ) : null}
+                <UserDetailSection
+                  title="Account information"
+                  data={{
+                    name: selectedUser.name,
+                    email: selectedUser.email,
+                    phone: selectedUser.phone,
+                    role: displayRole(selectedUser),
+                    platformRole: selectedUser.platformRole,
+                    status: selectedUser.status,
+                    isVerified: selectedUser.is_verified,
+                    createdAt: selectedUser.created_at,
+                    organization: selectedUser.organization,
                   }}
-                  placeholder="Write a message..."
-                  resize="none"
-                  rows={2}
-                  bg="white"
-                  isDisabled={conversationLoading || !conversationId || sending}
                 />
-                <VStack spacing={1}>
-                  <Button
-                    size="sm"
-                    variant={emojiOpen ? "solid" : "ghost"}
-                    colorScheme="yellow"
-                    aria-label="Choose emoji"
-                    onClick={() => setEmojiOpen((value) => !value)}
-                    isDisabled={!conversationId}
+                {selectedUser.profiles?.client && (
+                  <UserDetailSection
+                    title="Parent / client profile"
+                    data={selectedUser.profiles.client}
+                  />
+                )}
+                {selectedUser.profiles?.client &&
+                selectedUser.profiles.client.children?.length ? (
+                  <Box
+                    border="1px solid"
+                    borderColor="gray.200"
+                    borderRadius="lg"
+                    p={4}
                   >
-                    <Icon as={FiSmile} />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Attach image or PDF"
-                    onClick={() => fileInputRef.current?.click()}
-                    isDisabled={!conversationId || sending}
+                    <HStack justify="space-between" mb={3}>
+                      <Text fontWeight="700">Children</Text>
+                      <Badge colorScheme="purple">
+                        {selectedUser.profiles.client.children.length}
+                      </Badge>
+                    </HStack>
+                    <VStack align="stretch" spacing={3}>
+                      {selectedUser.profiles.client.children.map((child) => (
+                        <HStack
+                          key={child.id}
+                          align="flex-start"
+                          borderTop="1px solid"
+                          borderColor="gray.100"
+                          pt={3}
+                        >
+                          <Avatar
+                            name={`${child.name || ""} ${child.lastname || ""}`}
+                            src={child.avatar || undefined}
+                            size="sm"
+                          />
+                          <Box minW={0}>
+                            <Text fontWeight="600">
+                              {[child.name, child.lastname]
+                                .filter(Boolean)
+                                .join(" ") || "Unnamed child"}
+                            </Text>
+                            <Text fontSize="sm" color="gray.600">
+                              Grade: {child.grade || "Not provided"}
+                            </Text>
+                            <Text fontSize="sm" color="gray.600">
+                              School: {child.schools?.name || "Not linked"}
+                            </Text>
+                            {child.created_at ? (
+                              <Text fontSize="xs" color="gray.500">
+                                Added{" "}
+                                {formatDetailValue(
+                                  "created_at",
+                                  child.created_at,
+                                )}
+                              </Text>
+                            ) : null}
+                          </Box>
+                        </HStack>
+                      ))}
+                    </VStack>
+                  </Box>
+                ) : selectedUser.profiles?.client ? (
+                  <Box
+                    border="1px solid"
+                    borderColor="gray.200"
+                    borderRadius="lg"
+                    p={4}
                   >
-                    <Icon as={FiPaperclip} />
-                  </Button>
-                  {recordingSupported ? (
-                    <Button
-                      size="sm"
-                      colorScheme={recording ? "red" : "gray"}
-                      variant={recording ? "solid" : "ghost"}
-                      aria-label={recording ? "Stop voice note" : "Record voice note"}
-                      onClick={recording ? stopVoiceNote : startVoiceNote}
-                      isDisabled={!conversationId || sending}
+                    <Text fontWeight="700">Children</Text>
+                    <Text fontSize="sm" color="gray.500" mt={2}>
+                      No children are linked to this client account.
+                    </Text>
+                  </Box>
+                ) : null}
+                {selectedUser.profiles?.driver && (
+                  <>
+                    <UserDetailSection
+                      title="Driver profile"
+                      data={Object.fromEntries(
+                        Object.entries(selectedUser.profiles.driver).filter(
+                          ([key]) =>
+                            ![
+                              "avatar",
+                              "owner",
+                              "route",
+                              "location",
+                              "students",
+                              "studentCount",
+                            ].includes(key),
+                        ),
+                      )}
+                    />
+                    <Box
+                      border="1px solid"
+                      borderColor="gray.200"
+                      borderRadius="lg"
+                      p={4}
                     >
-                      <Icon as={recording ? FiSquare : FiMic} />
-                    </Button>
-                  ) : null}
-                  <Button
-                    size="sm"
-                    colorScheme="blue"
-                    aria-label="Send message"
-                    type="submit"
-                    isLoading={sending}
-                    isDisabled={(!draft.trim() && !selectedFile) || !conversationId}
-                  >
-                    <Icon as={FiSend} />
-                  </Button>
-                </VStack>
-              </Flex>
-              {emojiOpen ? (
-                <HStack mt={2} spacing={1} flexWrap="wrap">
-                  {EMOJI_OPTIONS.map((emoji) => (
-                    <Button
-                      key={emoji}
-                      size="sm"
-                      variant="ghost"
-                      fontSize="lg"
-                      onClick={() => setDraft((value) => `${value}${emoji}`)}
+                      <HStack justify="space-between" mb={3}>
+                        <Text fontWeight="700">Driver assignments</Text>
+                        <Badge colorScheme="blue">
+                          {selectedUser.profiles.driver.studentCount || 0}{" "}
+                          {(selectedUser.profiles.driver.studentCount || 0) ===
+                          1
+                            ? "student"
+                            : "students"}
+                        </Badge>
+                      </HStack>
+                      <VStack align="stretch" spacing={3}>
+                        <Box>
+                          <Text fontSize="xs" color="gray.500">
+                            Linked fleet owner
+                          </Text>
+                          <Text fontSize="sm" fontWeight="600">
+                            {selectedUser.profiles.driver.owner?.company_name ||
+                              selectedUser.profiles.driver.owner?.users?.name ||
+                              "Not assigned"}
+                          </Text>
+                        </Box>
+                        <Box>
+                          <Text fontSize="xs" color="gray.500">
+                            Route and directions
+                          </Text>
+                          <Text fontSize="sm" fontWeight="600">
+                            {selectedUser.profiles.driver.route?.route_name ||
+                              "No active route"}
+                          </Text>
+                          {selectedUser.profiles.driver.route ? (
+                            <HStack
+                              justify="space-between"
+                              align="flex-start"
+                              mt={1}
+                              gap={3}
+                            >
+                              <Text fontSize="sm" color="gray.600">
+                                {selectedUser.profiles.driver.route
+                                  .start_location || "Start not recorded"}
+                                {" → "}
+                                {selectedUser.profiles.driver.route
+                                  .end_location || "Destination not recorded"}
+                              </Text>
+                              {selectedUser.profiles.driver.route
+                                .start_location &&
+                              selectedUser.profiles.driver.route
+                                .end_location ? (
+                                <Button
+                                  as="a"
+                                  href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(selectedUser.profiles.driver.route.start_location)}&destination=${encodeURIComponent(selectedUser.profiles.driver.route.end_location)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  size="xs"
+                                  variant="outline"
+                                >
+                                  Directions
+                                </Button>
+                              ) : null}
+                            </HStack>
+                          ) : null}
+                        </Box>
+                        <Box>
+                          <Text fontSize="xs" color="gray.500">
+                            Last known location
+                          </Text>
+                          {selectedUser.profiles.driver.location ? (
+                            <HStack justify="space-between" align="center">
+                              <Text fontSize="sm">
+                                {selectedUser.profiles.driver.location.latitude}
+                                ,{" "}
+                                {
+                                  selectedUser.profiles.driver.location
+                                    .longitude
+                                }
+                              </Text>
+                              <Button
+                                as="a"
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedUser.profiles.driver.location.latitude},${selectedUser.profiles.driver.location.longitude}`)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                size="xs"
+                                variant="outline"
+                              >
+                                View on map
+                              </Button>
+                            </HStack>
+                          ) : (
+                            <Text fontSize="sm" color="gray.600">
+                              No location has been recorded.
+                            </Text>
+                          )}
+                        </Box>
+                        <Box>
+                          <Text fontSize="xs" color="gray.500" mb={2}>
+                            Students on route
+                          </Text>
+                          {selectedUser.profiles.driver.students?.length ? (
+                            <VStack align="stretch" spacing={2}>
+                              {selectedUser.profiles.driver.students.map(
+                                (student) => (
+                                  <HStack key={student.id}>
+                                    <Avatar
+                                      name={`${student.name || ""} ${student.lastname || ""}`}
+                                      src={student.avatar || undefined}
+                                      size="xs"
+                                    />
+                                    <Text fontSize="sm">
+                                      {[student.name, student.lastname]
+                                        .filter(Boolean)
+                                        .join(" ") || "Unnamed student"}
+                                      {student.grade
+                                        ? ` · Grade ${student.grade}`
+                                        : ""}
+                                    </Text>
+                                  </HStack>
+                                ),
+                              )}
+                            </VStack>
+                          ) : (
+                            <Text fontSize="sm" color="gray.600">
+                              No students are assigned to this route.
+                            </Text>
+                          )}
+                        </Box>
+                      </VStack>
+                    </Box>
+                  </>
+                )}
+                {selectedUser.profiles?.owner && (
+                  <>
+                    <UserDetailSection
+                      title="Fleet owner profile"
+                      data={Object.fromEntries(
+                        Object.entries(selectedUser.profiles.owner).filter(
+                          ([key]) =>
+                            !["users", "vehicles", "drivers"].includes(key),
+                        ),
+                      )}
+                    />
+                    <Box
+                      border="1px solid"
+                      borderColor="gray.200"
+                      borderRadius="xl"
+                      p={{ base: 4, md: 5 }}
+                      bg="white"
+                      boxShadow="sm"
                     >
-                      {emoji}
-                    </Button>
-                  ))}
-                </HStack>
-              ) : null}
-              {recording ? (
-                <Text color="red.500" fontSize="xs" mt={2}>
-                  Recording voice note… Press the stop button to send it.
-                </Text>
-              ) : (
-                <Text color="gray.500" fontSize="xs" mt={2}>
-                  Attach images or PDFs up to 20 MB. Voice notes use your microphone.
-                </Text>
-              )}
-              <Input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,application/pdf"
-                display="none"
-                onChange={(event) => {
-                  const [file] = event.target.files || [];
-                  if (file && file.size > 20 * 1024 * 1024) {
-                    setMessageError("Attachments must be 20 MB or smaller.");
-                  } else if (file) {
-                    setSelectedFile(file);
-                    setMessageError("");
-                  }
-                  event.target.value = "";
-                }}
+                      <HStack mb={4} spacing={3}>
+                        <Flex
+                          align="center"
+                          justify="center"
+                          boxSize={9}
+                          borderRadius="lg"
+                          bg="blue.50"
+                          color="blue.600"
+                        >
+                          <Icon as={FiTruck} />
+                        </Flex>
+                        <Text fontWeight="700" color="gray.800">
+                          Linked drivers
+                        </Text>
+                        <Badge colorScheme="blue">
+                          {selectedUser.profiles.owner.drivers?.length || 0}
+                        </Badge>
+                      </HStack>
+                      {selectedUser.profiles.owner.drivers?.length ? (
+                        <VStack align="stretch" spacing={3}>
+                          {selectedUser.profiles.owner.drivers.map((driver) => {
+                            const driverUser = Array.isArray(driver.users)
+                              ? driver.users[0]
+                              : driver.users;
+                            const routeStops = driver.route?.route_stops || [];
+                            const directionStops = routeStops.length
+                              ? routeStops.filter((stop) => stop.address)
+                              : driver.route?.route_waypoints || [];
+                            const directionsUrl =
+                              driver.route?.start_location &&
+                              driver.route?.end_location
+                                ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(driver.route.start_location)}&destination=${encodeURIComponent(driver.route.end_location)}${directionStops.length ? `&waypoints=${encodeURIComponent(directionStops.map((stop) => stop.address).join("|"))}` : ""}`
+                                : null;
+                            return (
+                              <Box
+                                key={driver.id}
+                                border="1px solid"
+                                borderColor="gray.100"
+                                borderRadius="lg"
+                                p={3}
+                                bg="gray.50"
+                              >
+                                <HStack align="flex-start" spacing={3}>
+                                  <Avatar
+                                    name={driverUser?.name || "Driver"}
+                                    src={driver.avatar || undefined}
+                                    size="sm"
+                                  />
+                                  <Box minW={0} flex={1}>
+                                    <Text fontWeight="600">
+                                      {driverUser?.name || "Unnamed driver"}
+                                    </Text>
+                                    <Text fontSize="sm" color="gray.600">
+                                      {driverUser?.email || "No email provided"}
+                                    </Text>
+                                    <HStack mt={1} spacing={2} flexWrap="wrap">
+                                      <Badge
+                                        colorScheme={
+                                          driver.status === "active"
+                                            ? "green"
+                                            : "gray"
+                                        }
+                                        textTransform="capitalize"
+                                      >
+                                        {driver.status || "Status unavailable"}
+                                      </Badge>
+                                      <Text fontSize="xs" color="gray.500">
+                                        {driver.vehicle_plate_number ||
+                                          "No vehicle plate on profile"}
+                                      </Text>
+                                    </HStack>
+                                  </Box>
+                                </HStack>
+                                <Box
+                                  mt={3}
+                                  pt={3}
+                                  borderTop="1px solid"
+                                  borderColor="gray.200"
+                                >
+                                  <HStack spacing={2} mb={1}>
+                                    <Icon as={FiMapPin} color="blue.500" />
+                                    <Text fontSize="xs" color="gray.500">
+                                      Assigned route
+                                    </Text>
+                                  </HStack>
+                                  {driver.route ? (
+                                    <Flex
+                                      justify="space-between"
+                                      align="flex-start"
+                                      gap={3}
+                                      wrap="wrap"
+                                    >
+                                      <Box>
+                                        <Text fontSize="sm" fontWeight="600">
+                                          {driver.route.route_name ||
+                                            "Unnamed route"}
+                                        </Text>
+                                        <Text fontSize="sm" color="gray.600">
+                                          {driver.route.start_location ||
+                                            "Start not recorded"}
+                                          {" → "}
+                                          {driver.route.end_location ||
+                                            "Destination not recorded"}
+                                        </Text>
+                                      </Box>
+                                      {directionsUrl ? (
+                                        <Button
+                                          as="a"
+                                          href={directionsUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          size="xs"
+                                          variant="outline"
+                                        >
+                                          Directions
+                                        </Button>
+                                      ) : null}
+                                    </Flex>
+                                  ) : (
+                                    <Text fontSize="sm" color="gray.600">
+                                      No active route assigned.
+                                    </Text>
+                                  )}
+                                </Box>
+                                {driver.route ? (
+                                  <>
+                                    <Box
+                                      mt={3}
+                                      pt={3}
+                                      borderTop="1px solid"
+                                      borderColor="gray.200"
+                                    >
+                                      <HStack justify="space-between" mb={2}>
+                                        <Text fontSize="xs" color="gray.500">
+                                          Linked students and parents
+                                        </Text>
+                                        <Badge colorScheme="blue">
+                                          {driver.students?.length || 0}
+                                        </Badge>
+                                      </HStack>
+                                      {driver.students?.length ? (
+                                        <VStack align="stretch" spacing={2}>
+                                          {driver.students.map((student) => {
+                                            const parent = Array.isArray(
+                                              student.parent,
+                                            )
+                                              ? student.parent[0]
+                                              : student.parent;
+                                            const parentUser = Array.isArray(
+                                              parent?.users,
+                                            )
+                                              ? parent.users[0]
+                                              : parent?.users;
+                                            const studentName = [
+                                              student.name,
+                                              student.lastname,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(" ");
+                                            const parentName =
+                                              parentUser?.name ||
+                                              [
+                                                parent?.first_name,
+                                                parent?.last_name,
+                                              ]
+                                                .filter(Boolean)
+                                                .join(" ");
+                                            return (
+                                              <Box
+                                                key={student.id}
+                                                borderRadius="md"
+                                                bg="white"
+                                                px={3}
+                                                py={2}
+                                              >
+                                                <Text
+                                                  fontSize="sm"
+                                                  fontWeight="600"
+                                                >
+                                                  {studentName ||
+                                                    "Unnamed student"}
+                                                  {student.grade
+                                                    ? ` · Grade ${student.grade}`
+                                                    : ""}
+                                                </Text>
+                                                <Text
+                                                  fontSize="xs"
+                                                  color="gray.600"
+                                                >
+                                                  Parent/guardian:{" "}
+                                                  {parentName ||
+                                                    "No linked parent"}
+                                                  {parentUser?.email ||
+                                                  parent?.phone
+                                                    ? ` · ${parentUser?.email || parent?.phone}`
+                                                    : ""}
+                                                </Text>
+                                              </Box>
+                                            );
+                                          })}
+                                        </VStack>
+                                      ) : (
+                                        <Text fontSize="sm" color="gray.600">
+                                          No students are linked to this route.
+                                        </Text>
+                                      )}
+                                    </Box>
+                                    <Box
+                                      mt={3}
+                                      pt={3}
+                                      borderTop="1px solid"
+                                      borderColor="gray.200"
+                                    >
+                                      <HStack justify="space-between" mb={2}>
+                                        <Text fontSize="xs" color="gray.500">
+                                          Route stops
+                                        </Text>
+                                        <Badge colorScheme="purple">
+                                          {directionStops.length}
+                                        </Badge>
+                                      </HStack>
+                                      {directionStops.length ? (
+                                        <VStack align="stretch" spacing={2}>
+                                          {directionStops.map((stop, index) => {
+                                            const stopChild = Array.isArray(
+                                              stop.children,
+                                            )
+                                              ? stop.children[0]
+                                              : stop.children;
+                                            const stopParent = Array.isArray(
+                                              stopChild?.clients,
+                                            )
+                                              ? stopChild.clients[0]
+                                              : stopChild?.clients;
+                                            const stopParentUser =
+                                              Array.isArray(stopParent?.users)
+                                                ? stopParent.users[0]
+                                                : stopParent?.users;
+                                            return (
+                                              <HStack
+                                                key={stop.id || `${stop.address}-${index}`}
+                                                align="flex-start"
+                                                spacing={3}
+                                              >
+                                                <Badge
+                                                  colorScheme="blue"
+                                                  minW={6}
+                                                  textAlign="center"
+                                                >
+                                                  {stop.stop_order || index + 1}
+                                                </Badge>
+                                                <Box minW={0}>
+                                                  <Text
+                                                    fontSize="sm"
+                                                    fontWeight="600"
+                                                  >
+                                                    {stop.children
+                                                      ? [
+                                                          stopChild?.name,
+                                                          stopChild?.lastname,
+                                                        ]
+                                                          .filter(Boolean)
+                                                          .join(" ") ||
+                                                        stop.name ||
+                                                        stop.address
+                                                      : stop.name ||
+                                                        stop.address}
+                                                    {stop.stop_type
+                                                      ? ` · ${stop.stop_type}`
+                                                      : ""}
+                                                  </Text>
+                                                  <Text
+                                                    fontSize="xs"
+                                                    color="gray.600"
+                                                  >
+                                                    {stop.address}
+                                                  </Text>
+                                                  {stopParent ? (
+                                                    <Text
+                                                      fontSize="xs"
+                                                      color="gray.500"
+                                                    >
+                                                      Parent/guardian:{" "}
+                                                      {stopParentUser?.name ||
+                                                        [
+                                                          stopParent.first_name,
+                                                          stopParent.last_name,
+                                                        ]
+                                                          .filter(Boolean)
+                                                          .join(" ") ||
+                                                        "Not provided"}
+                                                    </Text>
+                                                  ) : null}
+                                                </Box>
+                                              </HStack>
+                                            );
+                                          })}
+                                        </VStack>
+                                      ) : (
+                                        <Text fontSize="sm" color="gray.600">
+                                          No route stops have been recorded.
+                                        </Text>
+                                      )}
+                                    </Box>
+                                  </>
+                                ) : null}
+                              </Box>
+                            );
+                          })}
+                        </VStack>
+                      ) : (
+                        <Text fontSize="sm" color="gray.500">
+                          No drivers are linked to this fleet owner.
+                        </Text>
+                      )}
+                    </Box>
+
+                    <Box
+                      border="1px solid"
+                      borderColor="gray.200"
+                      borderRadius="xl"
+                      p={{ base: 4, md: 5 }}
+                      bg="white"
+                      boxShadow="sm"
+                    >
+                      <HStack mb={4} spacing={3}>
+                        <Flex
+                          align="center"
+                          justify="center"
+                          boxSize={9}
+                          borderRadius="lg"
+                          bg="blue.50"
+                          color="blue.600"
+                        >
+                          <Icon as={FiTruck} />
+                        </Flex>
+                        <Text fontWeight="700" color="gray.800">
+                          Fleet vehicles
+                        </Text>
+                        <Badge colorScheme="blue">
+                          {selectedUser.profiles.owner.vehicles?.length || 0}
+                        </Badge>
+                      </HStack>
+                      {selectedUser.profiles.owner.vehicles?.length ? (
+                        <VStack align="stretch" spacing={3}>
+                          {selectedUser.profiles.owner.vehicles.map(
+                            (vehicle) => {
+                              const assignedDriver =
+                                selectedUser.profiles.owner.drivers?.find(
+                                  (driver) => driver.id === vehicle.driver_id,
+                                );
+                              const assignedDriverUser = Array.isArray(
+                                assignedDriver?.users,
+                              )
+                                ? assignedDriver.users[0]
+                                : assignedDriver?.users;
+                              return (
+                                <Box
+                                  key={vehicle.id}
+                                  border="1px solid"
+                                  borderColor="gray.100"
+                                  borderRadius="lg"
+                                  p={3}
+                                >
+                                  <Flex
+                                    justify="space-between"
+                                    align="flex-start"
+                                    gap={3}
+                                  >
+                                    <Box>
+                                      <Text fontWeight="700">
+                                        {vehicle.name || "Unnamed vehicle"}
+                                      </Text>
+                                      <Text fontSize="sm" color="gray.600">
+                                        {[vehicle.model, vehicle.license_plate]
+                                          .filter(Boolean)
+                                          .join(" · ") ||
+                                          "No model or plate provided"}
+                                      </Text>
+                                    </Box>
+                                    <Badge
+                                      colorScheme={
+                                        vehicle.status === "active"
+                                          ? "green"
+                                          : "gray"
+                                      }
+                                      textTransform="capitalize"
+                                    >
+                                      {vehicle.status || "Status unavailable"}
+                                    </Badge>
+                                  </Flex>
+                                  <SimpleGrid
+                                    columns={{ base: 1, sm: 2 }}
+                                    spacing={2}
+                                    mt={3}
+                                  >
+                                    <Text fontSize="sm" color="gray.600">
+                                      Capacity:{" "}
+                                      {vehicle.capacity || "Not provided"}
+                                    </Text>
+                                    <Text fontSize="sm" color="gray.600">
+                                      Color: {vehicle.color || "Not provided"}
+                                    </Text>
+                                    <Text fontSize="sm" color="gray.600">
+                                      Driver:{" "}
+                                      {assignedDriverUser?.name ||
+                                        "Not assigned"}
+                                    </Text>
+                                    <Text fontSize="sm" color="gray.600">
+                                      Route:{" "}
+                                      {assignedDriver?.route?.route_name ||
+                                        "No active route"}
+                                    </Text>
+                                  </SimpleGrid>
+                                  {vehicle.vehicle_images?.length ? (
+                                    <SimpleGrid
+                                      columns={{ base: 2, sm: 3, md: 4 }}
+                                      spacing={2}
+                                      mt={3}
+                                    >
+                                      {vehicle.vehicle_images.map(
+                                        (image, index) => {
+                                          const imageUrl =
+                                            typeof image === "string"
+                                              ? image
+                                              : image?.url ||
+                                                image?.publicUrl ||
+                                                image?.image_url;
+                                          return imageUrl ? (
+                                            <Image
+                                              key={`${vehicle.id}-image-${index}`}
+                                              src={imageUrl}
+                                              alt={`${vehicle.name || "Vehicle"} photo ${index + 1}`}
+                                              w="100%"
+                                              h="120px"
+                                              objectFit="cover"
+                                              borderRadius="md"
+                                            />
+                                          ) : null;
+                                        },
+                                      )}
+                                    </SimpleGrid>
+                                  ) : (
+                                    <Text fontSize="sm" color="gray.500" mt={3}>
+                                      No vehicle images available.
+                                    </Text>
+                                  )}
+                                </Box>
+                              );
+                            },
+                          )}
+                        </VStack>
+                      ) : (
+                        <Text fontSize="sm" color="gray.500">
+                          No vehicles are registered to this fleet owner.
+                        </Text>
+                      )}
+                    </Box>
+                  </>
+                )}
+                {selectedUser.profiles?.schoolMemberships?.length ? (
+                  <Box
+                    border="1px solid"
+                    borderColor="gray.200"
+                    borderRadius="lg"
+                    p={4}
+                  >
+                    <Text fontWeight="700" mb={3}>
+                      School memberships
+                    </Text>
+                    <VStack align="stretch" spacing={3}>
+                      {selectedUser.profiles.schoolMemberships.map(
+                        (membership) => (
+                          <UserDetailSection
+                            key={membership.id}
+                            title={membership.name}
+                            data={{
+                              staffRole: membership.staffRole,
+                              active: membership.isActive,
+                              joinedAt: membership.createdAt,
+                            }}
+                          />
+                        ),
+                      )}
+                    </VStack>
+                  </Box>
+                ) : null}
+              </VStack>
+            )}
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+      <Modal isOpen={isPhotoOpen} onClose={onPhotoClose} size="4xl" isCentered>
+        <ModalOverlay bg="blackAlpha.800" />
+        <ModalContent bg="gray.900" maxW="min(90vw, 960px)">
+          <ModalCloseButton color="white" zIndex={1} />
+          <ModalBody
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            p={{ base: 3, md: 6 }}
+          >
+            {selectedPhotoUser?.avatar ? (
+              <Image
+                src={selectedPhotoUser.avatar}
+                alt={`${selectedPhotoUser.name || selectedPhotoUser.email || "User"} profile photo`}
+                maxH="80vh"
+                maxW="100%"
+                objectFit="contain"
               />
-            </Box>
+            ) : null}
           </ModalBody>
         </ModalContent>
       </Modal>

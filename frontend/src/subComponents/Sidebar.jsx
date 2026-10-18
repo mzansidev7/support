@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+    Badge,
     Box,
     Button,
     Drawer,
@@ -15,6 +16,7 @@ import {
 } from "@chakra-ui/react";
 import {
     FiActivity,
+    FiBell,
     FiDollarSign,
     FiGrid,
     FiLogOut,
@@ -28,6 +30,16 @@ import {
 } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import logo from "../Asserts/images/logo.png";
+import { supabaseClient } from "../supabaseClient/supabase.config";
+
+const API_URL = (
+    process.env.REACT_APP_API_URL ||
+    (process.env.NODE_ENV === "development"
+        ? "http://localhost:4000"
+        : "https://track-my-kid-server-production.up.railway.app")
+).replace(/\/$/, "");
+const REFRESH_INTERVAL_MS = 30_000;
+const MESSAGE_COUNT_REFRESH_INTERVAL_MS = 15_000;
 
 const items = [
     { label: "Dashboard", path: "/dashboard", icon: FiGrid },
@@ -39,6 +51,7 @@ const items = [
     { label: "Vehicles", path: "/vehicles", icon: FiTruck },
     { label: "Payments", path: "/payments", icon: FiDollarSign },
     { label: "Requests", path: "/requests", icon: FiActivity },
+    { label: "Notifications", path: "/notifications", icon: FiBell },
     { label: "Live Map", path: "/live_map", icon: FiMap },
     { label: "Settings", path: "/settings", icon: FiSettings },
     { label: "Profile", path: "/profile", icon: FiUser },
@@ -55,11 +68,124 @@ const SidebarContent = ({ onClose }) => {
         }
     };
     const [user, setUser] = useState(readUser);
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+    const [unreadMessageCount, setUnreadMessageCount] = useState(0);
     useEffect(() => {
         const refreshUser = () => setUser(readUser());
         window.addEventListener("support-user-updated", refreshUser);
         return () => window.removeEventListener("support-user-updated", refreshUser);
     }, []);
+    const refreshUnreadNotificationCount = useCallback(async () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            setUnreadNotificationCount(0);
+            return;
+        }
+        try {
+            const response = await fetch(
+                `${API_URL}/admin/support-notifications/unread-count`,
+                { headers: { Authorization: `Bearer ${token}` } },
+            );
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    result?.error || "Unable to load unread notification count.",
+                );
+            }
+            setUnreadNotificationCount(
+                Math.max(0, Number(result?.unread_count) || 0),
+            );
+        } catch (error) {
+            console.error("Could not refresh unread notification count:", error);
+        }
+    }, []);
+    const refreshUnreadMessageCount = useCallback(async () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            setUnreadMessageCount(0);
+            return;
+        }
+        try {
+            const response = await fetch(`${API_URL}/admin/conversations`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            const result = await response.json();
+            if (!response.ok || !Array.isArray(result)) {
+                throw new Error(
+                    result?.error || "Unable to load unread message count.",
+                );
+            }
+            const unreadCount = result.reduce(
+                (total, conversation) =>
+                    total + Math.max(0, Number(conversation.unread_count) || 0),
+                0,
+            );
+            setUnreadMessageCount(unreadCount);
+        } catch (error) {
+            console.error("Could not refresh unread message count:", error);
+        }
+    }, []);
+    useEffect(() => {
+        void refreshUnreadNotificationCount();
+        let debounceTimer;
+        const channel = supabaseClient
+            .channel("support-sidebar-notification-count")
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "support_dashboard_events",
+                },
+                (payload) => {
+                    if (payload.new?.resource_type !== "support_notifications") return;
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(
+                        () => void refreshUnreadNotificationCount(),
+                        400,
+                    );
+                },
+            )
+            .subscribe((status, subscriptionError) => {
+                if (status === "CHANNEL_ERROR" || subscriptionError) {
+                    console.warn(
+                        "Sidebar notifications realtime subscription issue:",
+                        subscriptionError || status,
+                    );
+                }
+            });
+        const interval = setInterval(
+            () => void refreshUnreadNotificationCount(),
+            REFRESH_INTERVAL_MS,
+        );
+        const refreshOnUserUpdate = () => {
+            setUser(readUser());
+            void refreshUnreadNotificationCount();
+        };
+        window.addEventListener("support-user-updated", refreshOnUserUpdate);
+        return () => {
+            clearTimeout(debounceTimer);
+            clearInterval(interval);
+            window.removeEventListener("support-user-updated", refreshOnUserUpdate);
+            void supabaseClient.removeChannel(channel);
+        };
+    }, [refreshUnreadNotificationCount]);
+    useEffect(() => {
+        void refreshUnreadMessageCount();
+        const interval = setInterval(
+            () => void refreshUnreadMessageCount(),
+            MESSAGE_COUNT_REFRESH_INTERVAL_MS,
+        );
+        const refreshOnFocus = () => void refreshUnreadMessageCount();
+        const refreshOnUserUpdate = () => void refreshUnreadMessageCount();
+        window.addEventListener("focus", refreshOnFocus);
+        window.addEventListener("support-user-updated", refreshOnUserUpdate);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("focus", refreshOnFocus);
+            window.removeEventListener("support-user-updated", refreshOnUserUpdate);
+        };
+    }, [refreshUnreadMessageCount]);
     const displayName =
         user?.full_name || user?.admin_profile?.name || user?.name || "Support user";
     const email = user?.email || user?.admin_profile?.email || "";
@@ -159,7 +285,35 @@ const SidebarContent = ({ onClose }) => {
                                 onClose?.();
                             }}
                         >
-                            {item.label}
+                            <HStack w="100%" justify="space-between">
+                                <Text>{item.label}</Text>
+                                {item.path === "/notifications" &&
+                                unreadNotificationCount > 0 ? (
+                                    <Badge
+                                        colorScheme="red"
+                                        borderRadius="full"
+                                        minW={5}
+                                        textAlign="center"
+                                    >
+                                        {unreadNotificationCount > 99
+                                            ? "99+"
+                                            : unreadNotificationCount}
+                                    </Badge>
+                                ) : null}
+                                {item.path === "/messages" &&
+                                unreadMessageCount > 0 ? (
+                                    <Badge
+                                        colorScheme="red"
+                                        borderRadius="full"
+                                        minW={5}
+                                        textAlign="center"
+                                    >
+                                        {unreadMessageCount > 99
+                                            ? "99+"
+                                            : unreadMessageCount}
+                                    </Badge>
+                                ) : null}
+                            </HStack>
                         </Button>
                     );
                 })}

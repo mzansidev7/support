@@ -1,5 +1,5 @@
 import React from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { useDisclosure } from "@chakra-ui/react";
 import LoginPage from "./components/login/LoginPage";
 import Dashboard from "./components/dashboard/Dashboard";
@@ -14,7 +14,19 @@ import Users from "./components/dashboard/Users";
 import MessagesInbox from "./components/dashboard/MessagesInbox";
 import Payments from "./components/dashboard/Payments";
 import SupportUsers from "./components/dashboard/SupportUsers";
+import Notifications from "./components/dashboard/Notifications";
 import DashboardLayout from "./components/layout/DashboardLayout";
+
+const getCachedSupportSession = () => {
+    try {
+        const token = localStorage.getItem("token");
+        const user = JSON.parse(localStorage.getItem("user") || "null");
+        return token && user?.role === "admin";
+    } catch (error) {
+        console.error("Could not restore cached support session:", error);
+        return false;
+    }
+};
 
 const Main = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -46,7 +58,16 @@ const Main = () => {
     return (
         <>
             <Routes>
-                <Route path="/" element={<LoginPage />} />
+                <Route
+                    path="/"
+                    element={
+                        getCachedSupportSession() ? (
+                            <Navigate to="/dashboard" replace />
+                        ) : (
+                            <LoginPage />
+                        )
+                    }
+                />
 
                 {/* WRAPPED PAGES */}
                 <Route
@@ -162,6 +183,19 @@ const Main = () => {
                             onClose={onClose}
                         >
                             <Requests />
+                        </DashboardLayout>
+                    }
+                />
+
+                <Route
+                    path="/notifications"
+                    element={
+                        <DashboardLayout
+                            isOpen={isOpen}
+                            onOpen={onOpen}
+                            onClose={onClose}
+                        >
+                            <Notifications />
                         </DashboardLayout>
                     }
                 />

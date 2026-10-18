@@ -2,7 +2,7 @@ const prefix = "support_message_cache_v1";
 
 export const readMessageCache = (key) => {
   try {
-    const value = window.sessionStorage.getItem(`${prefix}:${key}`);
+    const value = window.localStorage.getItem(`${prefix}:${key}`);
     return value ? JSON.parse(value) : null;
   } catch (error) {
     console.warn("Could not read cached support messages:", error);
@@ -12,7 +12,7 @@ export const readMessageCache = (key) => {
 
 export const writeMessageCache = (key, value) => {
   try {
-    window.sessionStorage.setItem(`${prefix}:${key}`, JSON.stringify(value));
+    window.localStorage.setItem(`${prefix}:${key}`, JSON.stringify(value));
   } catch (error) {
     console.warn("Could not save cached support messages:", error);
   }

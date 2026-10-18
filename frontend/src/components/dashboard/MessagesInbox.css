@@ -1,0 +1,712 @@
+.messages-inbox-page {
+  min-width: 0;
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 22px 24px 24px;
+}
+.messages-inbox-page > header {
+  flex: 0 0 auto;
+  margin-bottom: 14px !important;
+}
+.messages-inbox-layout {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(245px, 0.82fr) minmax(360px, 1.65fr) minmax(245px, 0.9fr);
+  overflow: hidden;
+  border: 1px solid #dce4eb;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(15 23 42 / 5%);
+}
+.messages-inbox-list,
+.messages-inbox-thread,
+.messages-inbox-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  background: #fff;
+}
+.messages-inbox-list {
+  border-right: 1px solid #e5eaf0;
+  background: #f8fafc;
+}
+.messages-inbox-list-heading,
+.messages-inbox-details-heading {
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+  border-bottom: 1px solid #e5eaf0;
+  color: #25324a;
+  font-size: 12px;
+  font-weight: 750;
+}
+.messages-inbox-search {
+  padding: 12px 11px 8px;
+}
+.messages-inbox-search input {
+  border-color: #e1e7ee !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  font-size: 12px !important;
+}
+.messages-inbox-section-title {
+  padding: 8px 14px 6px;
+  color: #64748b;
+  font-size: 10px !important;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.messages-inbox-conversation-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+.messages-inbox-conversation {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-top: 1px solid #edf1f4;
+  padding: 12px 11px;
+  background: transparent;
+  color: #263247;
+  text-align: left;
+  cursor: pointer;
+}
+.messages-inbox-conversation:hover {
+  background: #f0f5f8;
+}
+.messages-inbox-conversation.is-selected {
+  background: #e8eff3;
+  box-shadow: inset 3px 0 #2583dd;
+}
+.messages-inbox-conversation-info {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+.messages-inbox-conversation-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  color: #263247;
+  font-size: 11px;
+  font-weight: 700;
+}
+.messages-inbox-conversation-name small {
+  flex: 0 0 auto;
+  color: #8491a3;
+  font-size: 9px;
+  font-weight: 500;
+}
+.messages-inbox-conversation-preview {
+  display: block;
+  overflow: hidden;
+  margin-top: 4px;
+  color: #778497;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.messages-inbox-conversation-meta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
+}
+.messages-inbox-conversation-meta time {
+  color: #8995a4;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.messages-inbox-thread {
+  min-height: 0;
+  border-right: 1px solid #e5eaf0;
+}
+.messages-inbox-thread-header {
+  min-height: 50px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid #e8edf2;
+}
+.messages-inbox-header-more {
+  margin-left: auto;
+  color: #66758a;
+}
+.messages-inbox-mobile-back {
+  display: none !important;
+}
+.messages-inbox-messages {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px 16px;
+  background:
+    radial-gradient(circle at 1px 1px, rgb(148 163 184 / 8%) 1px, transparent 0)
+      0 0 / 18px 18px,
+    #fff;
+}
+.inbox-message-row {
+  width: 100%;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 7px;
+}
+.inbox-message-row.is-own {
+  justify-content: flex-end;
+}
+.inbox-message {
+  min-width: 0;
+  max-width: min(78%, 430px);
+  border: 1px solid #e2e8f0;
+  border-radius: 15px 15px 15px 4px;
+  padding: 9px 11px 6px;
+  background: #f1f4f6;
+  color: #344154;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.inbox-message.is-own {
+  border-color: #111827;
+  border-radius: 15px 15px 4px 15px;
+  background: #111827;
+  color: #fff;
+  text-align: right;
+}
+.inbox-message img,
+.inbox-message audio {
+  display: block;
+  max-width: 280px;
+  max-height: 240px;
+}
+.inbox-attachment-group {
+  display: grid;
+  max-width: 360px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+.inbox-attachment-group > :only-child {
+  grid-column: 1 / -1;
+}
+.inbox-attachment-group img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+.inbox-image-preview-trigger {
+  display: block;
+  min-width: 0;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  cursor: zoom-in;
+}
+.inbox-image-preview-trigger img {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+.inbox-attachment-group audio {
+  width: 100%;
+  grid-column: 1 / -1;
+}
+.inbox-pdf-attachment {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+.inbox-pdf-preview-trigger {
+  display: inline-block;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.inbox-message a {
+  color: inherit;
+  text-decoration: underline;
+}
+.inbox-message-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+.inbox-message-time {
+  margin: 0 !important;
+  opacity: 0.68;
+  font-size: 10px !important;
+  line-height: 14px;
+  text-align: right;
+}
+.inbox-message-reaction-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  font-size: 11px;
+  line-height: 14px;
+}
+.inbox-message-reaction-badges span {
+  display: inline-block;
+  transform: translateY(1px);
+}
+.inbox-message-footer.is-own {
+  color: rgb(255 255 255 / 68%);
+}
+.inbox-message-read-tick {
+  display: inline-block;
+  margin-left: 5px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -2px;
+}
+.inbox-message-read-tick.is-read {
+  color: #86efac;
+}
+.inbox-message-reactions {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+}
+.inbox-message-reactions:focus-within {
+  z-index: 20;
+}
+.inbox-message-reaction,
+.inbox-message-reaction-add,
+.inbox-message-reaction-like {
+  display: inline-flex;
+  min-width: 0;
+  height: auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+.inbox-message-reaction.is-selected {
+  opacity: 0.95;
+}
+.inbox-message-reaction small {
+  display: none;
+}
+.inbox-message-reaction-add {
+  color: inherit;
+}
+.inbox-message-reaction-like {
+  color: inherit;
+}
+.inbox-message-reaction-like.is-selected {
+  border-color: #f0a9b9;
+  background: #fff0f3;
+}
+.inbox-reaction-picker {
+  position: fixed;
+  z-index: 10000;
+  display: flex;
+  gap: 2px;
+  border: 1px solid #e1e7ef;
+  border-radius: 18px;
+  padding: 4px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(15 23 42 / 18%);
+}
+.inbox-reaction-picker button {
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 19px;
+  padding: 0;
+  cursor: pointer;
+}
+.inbox-reaction-picker button:hover {
+  background: #edf4fc;
+}
+.inbox-message-error {
+  display: block !important;
+  margin-top: 5px;
+  color: #ffd7d7;
+  font-size: 10px !important;
+  font-weight: 700;
+  text-align: right;
+}
+.inbox-image-preview-modal {
+  max-width: 96vw !important;
+  background: #101318 !important;
+}
+.inbox-image-preview-modal-body {
+  position: relative;
+  display: flex;
+  min-height: min(80vh, 760px);
+  align-items: center;
+  justify-content: center;
+  padding: 48px 64px !important;
+}
+.inbox-pdf-preview-modal {
+  display: block;
+  width: min(900px, 100%);
+  height: min(78vh, 900px);
+  border: 0;
+  background: white;
+}
+.inbox-image-preview-modal-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(80vh - 96px);
+  object-fit: contain;
+}
+.inbox-preview-download {
+  position: absolute !important;
+  top: 12px;
+  right: 52px;
+  z-index: 2;
+  color: white !important;
+  background: rgb(0 0 0 / 55%) !important;
+}
+.inbox-preview-status,
+.inbox-preview-error {
+  color: white;
+  text-align: center;
+}
+.inbox-preview-error {
+  position: absolute;
+  bottom: 12px;
+  max-width: 75%;
+  color: #fecaca;
+}
+.inbox-image-preview-nav {
+  position: absolute !important;
+  top: 50%;
+  z-index: 1;
+  transform: translateY(-50%);
+  color: white !important;
+  background: rgb(0 0 0 / 55%) !important;
+}
+.inbox-image-preview-nav.is-previous {
+  left: 14px;
+}
+.inbox-image-preview-nav.is-next {
+  right: 14px;
+}
+.inbox-image-preview-counter {
+  position: absolute;
+  bottom: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: white;
+  font-size: 12px !important;
+}
+.messages-inbox-composer {
+  flex: 0 0 auto;
+  padding: 11px 13px 12px;
+  border-top: 1px solid #e5eaf0;
+  background: #fff;
+}
+.messages-inbox-attachment-preview {
+  min-width: 0;
+  flex: 0 0 min(270px, 100%);
+  gap: 10px;
+  margin: 0 8px 8px 0;
+  border: 1px solid #dce4eb;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: #f8fafc;
+}
+.messages-inbox-attachment-previews {
+  flex-wrap: wrap;
+  margin-bottom: 1px;
+}
+.messages-inbox-attachment-thumbnail {
+  width: 54px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  object-fit: cover;
+}
+.messages-inbox-attachment-audio {
+  width: min(220px, 40%);
+  height: 34px;
+  flex: 0 0 auto;
+}
+.messages-inbox-attachment-file-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 6px;
+  background: #e8eff3;
+  color: #3986f5;
+}
+.messages-inbox-attachment-info {
+  flex: 1;
+  overflow: hidden;
+  font-size: 11px;
+}
+.messages-inbox-attachment-info p + p {
+  font-size: 10px;
+}
+.messages-inbox-composer-row {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+.messages-inbox-composer .messages-inbox-composer-input {
+  min-width: 0;
+  flex: 1;
+  min-height: 38px;
+  height: 38px;
+  align-self: center;
+  border-color: #dce4eb !important;
+  border-radius: 7px !important;
+  font-size: 12px !important;
+}
+.messages-inbox-composer .messages-inbox-composer-input:focus {
+  height: 38px;
+}
+.messages-inbox-recording-status {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  padding: 5px 9px;
+  color: #b91c1c;
+  font-size: 11px;
+}
+.messages-inbox-recording-progress {
+  margin-top: 4px;
+  border-radius: 999px;
+}
+.messages-inbox-composer-tools {
+  flex: 0 0 auto;
+  gap: 2px !important;
+}
+.messages-inbox-send-button {
+  flex: 0 0 auto;
+}
+.messages-inbox-composer-hint {
+  margin-top: 5px;
+  font-size: 10px !important;
+}
+.messages-inbox-file-input {
+  display: none;
+}
+.messages-inbox-emoji-picker {
+  max-height: min(420px, 55vh);
+  overflow: hidden;
+  border: 1px solid #e1e7ef;
+  border-radius: 14px;
+  padding: 10px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 16%);
+}
+.messages-inbox-emoji-overlay {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  background: transparent;
+}
+.messages-inbox-emoji-header {
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: #24364b;
+}
+.messages-inbox-emoji-search {
+  margin-bottom: 7px;
+  border-radius: 8px !important;
+  background: #f7f9fc !important;
+}
+.messages-inbox-emoji-categories {
+  overflow-x: auto;
+  padding-bottom: 5px;
+}
+.messages-inbox-emoji-categories button {
+  display: flex;
+  min-width: 52px;
+  height: 42px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 6px;
+  font-size: 9px;
+}
+.messages-inbox-emoji-category-icon {
+  font-size: 16px;
+}
+.messages-inbox-emoji-category-title {
+  margin: 6px 0 !important;
+  color: #60738b;
+  font-size: 10px !important;
+  font-weight: 700;
+}
+.messages-inbox-emoji-grid {
+  display: grid;
+  max-height: 230px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  overflow-y: auto;
+}
+.messages-inbox-emoji-grid button {
+  min-width: 0;
+  height: 35px;
+  padding: 0;
+  font-size: 20px;
+}
+.messages-inbox-emoji-no-results {
+  grid-column: 1 / -1;
+  padding: 12px 4px;
+  color: #687a90;
+  font-size: 11px !important;
+}
+@media (max-width: 520px) {
+  .messages-inbox-composer {
+    padding: 9px;
+  }
+  .messages-inbox-composer-row {
+    gap: 4px;
+  }
+  .messages-inbox-composer-tools {
+    gap: 0 !important;
+  }
+  .messages-inbox-composer-tools button {
+    min-width: 30px;
+    width: 30px;
+    height: 34px;
+    padding: 0;
+  }
+  .messages-inbox-send-button {
+    min-width: 36px !important;
+    padding-inline: 8px !important;
+  }
+  .messages-inbox-send-button .chakra-button__icon {
+    margin-inline-end: 0 !important;
+  }
+}
+.messages-inbox-readonly {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 13px;
+  border-top: 1px solid #e5eaf0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+}
+.messages-inbox-details {
+  padding-bottom: 14px;
+  background: #f8fafc;
+}
+.messages-inbox-details-heading {
+  margin-bottom: 12px;
+  background: #fff;
+}
+.messages-inbox-details > .chakra-stack {
+  padding: 0 11px;
+}
+.messages-inbox-detail-card {
+  border: 1px solid #e4eaf0;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 3%);
+}
+.messages-inbox-detail-title {
+  margin-bottom: 11px;
+  color: #344154;
+  font-size: 11px !important;
+  font-weight: 750;
+}
+.messages-inbox-detail-line {
+  margin-top: 9px;
+  color: #758397;
+  font-size: 10px !important;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.messages-inbox-empty {
+  padding: 14px;
+  color: #8491a3;
+  font-size: 11px !important;
+  text-align: center;
+}
+.messages-inbox-no-selection {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: #9aa6b5;
+}
+.messages-inbox-no-selection svg {
+  font-size: 28px;
+}
+.messages-inbox-no-selection p {
+  font-size: 12px;
+}
+
+@media (max-width: 1050px) {
+  .messages-inbox-layout {
+    grid-template-columns: minmax(220px, 0.8fr) minmax(330px, 1.4fr);
+  }
+  .messages-inbox-details {
+    display: none;
+  }
+  .messages-inbox-thread {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .messages-inbox-page {
+    height: calc(100vh - 56px);
+    height: calc(100dvh - 56px);
+    padding: 14px 12px 12px;
+  }
+  .messages-inbox-layout {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .messages-inbox-thread {
+    display: none;
+  }
+  .messages-inbox-layout.has-selection .messages-inbox-list {
+    display: none;
+  }
+  .messages-inbox-layout.has-selection .messages-inbox-thread {
+    display: flex;
+  }
+  .messages-inbox-mobile-back {
+    display: inline-flex !important;
+  }
+}
