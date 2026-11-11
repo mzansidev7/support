@@ -67,19 +67,13 @@ import {
 } from "react-icons/fi";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
+import { API_URL } from "../../Urls";
 import {
   getCurrentUserIds,
   isCurrentUserId,
 } from "../../utils/asyncStorage/currentUserIdentity";
 import "../../styles/Settings.css";
 import PageHeader from "./PageHeader";
-
-const API_URL = (
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:4000"
-    : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
 
 const ticketLevels = [
   ["low", "Low"],

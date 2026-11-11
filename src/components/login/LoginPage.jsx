@@ -3,14 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from "lucide-react";
 import mainLogo from "../../Asserts/images/mainLogo.png";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
+import { API_URL } from "../../Urls";
 import "./LoginPage.css";
-
-const API_URL = (
-    process.env.REACT_APP_API_URL ||
-    (process.env.NODE_ENV === "development"
-        ? "http://localhost:4000"
-        : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
 
 const getLoginErrorMessage = (code) => {
     switch (code) {

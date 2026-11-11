@@ -37,6 +37,7 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
+import { API_URL } from "../../Urls";
 import PageHeader from "./PageHeader";
 import { getServiceDateKey, isAllowedHistoryDate } from "./tripHistoryUtils";
 import {
@@ -44,12 +45,6 @@ import {
   getUpcomingTripDates,
 } from "./upcomingTripUtils";
 
-const API_URL = (
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:4000"
-    : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
 const CACHE_PREFIX = "support-trips-cache";
 const REFRESH_INTERVAL_MS = 30_000;
 

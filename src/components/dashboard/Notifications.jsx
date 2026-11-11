@@ -35,14 +35,9 @@ import {
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
+import { API_URL } from "../../Urls";
 import PageHeader from "./PageHeader";
 
-const API_URL = (
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:4000"
-    : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
 const PAGE_SIZE = 50;
 const DISPLAY_PAGE_SIZE = 14;
 const REFRESH_INTERVAL_MS = 30_000;

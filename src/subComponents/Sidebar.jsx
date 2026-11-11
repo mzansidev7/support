@@ -30,15 +30,10 @@ import {
 } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import logo from "../Asserts/images/logo.png";
+import { API_URL } from "../Urls";
 import { supabaseClient } from "../supabaseClient/supabase.config";
 import { clearSupportSession } from "../utils/asyncStorage/authSession";
 
-const API_URL = (
-    process.env.REACT_APP_API_URL ||
-    (process.env.NODE_ENV === "development"
-        ? "http://localhost:4000"
-        : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
 const REFRESH_INTERVAL_MS = 30_000;
 const MESSAGE_COUNT_REFRESH_INTERVAL_MS = 15_000;
 

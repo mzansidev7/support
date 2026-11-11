@@ -60,15 +60,10 @@ import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
+import { API_URL } from "../../Urls";
 import PageHeader from "./PageHeader";
 import { showConfirmationAlert } from "../../utils/sweetAlert.js";
 
-const API_URL = (
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:4000"
-    : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
 const CACHE_PREFIX = "support-requests-cache";
 const REFRESH_INTERVAL_MS = 30_000;
 const emergencyAlertIcon = L.divIcon({

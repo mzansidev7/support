@@ -46,14 +46,9 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
+import { API_URL } from "../../Urls";
 import PageHeader from "./PageHeader";
 
-const API_URL = (
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:4000"
-    : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
 const CACHE_PREFIX = "support-vehicles-cache";
 const REFRESH_INTERVAL_MS = 30_000;
 
