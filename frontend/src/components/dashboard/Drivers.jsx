@@ -44,9 +44,10 @@ import {
   FiUser,
 } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
-import "./Drivers.css";
+import "../../styles/Drivers.css";
 import PageHeader from "./PageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
+import { PresenceStatus } from "../../presence/PresenceIndicator";
 
 const API_URL = (
   process.env.REACT_APP_API_URL ||
@@ -356,7 +357,7 @@ const Drivers = () => {
   ).length;
 
   return (
-    <Box className="support-drivers-page">
+    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
       <PageHeader
         eyebrow="FLEET OPERATIONS"
         title="Drivers Monitoring"
@@ -457,6 +458,7 @@ const Drivers = () => {
                         <Text fontSize="sm" color="gray.500" noOfLines={1}>
                           {driver.users?.email || "No email on file"}
                         </Text>
+                        <PresenceStatus userId={driver.users?.id || driver.user_id} />
                       </Box>
                     </HStack>
                     <Badge
@@ -605,8 +607,15 @@ const Drivers = () => {
             {selectedDriver ? (
               <VStack align="stretch" spacing={4} pb={2}>
                 <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
-                  <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
-                    <Text fontSize="xs" color="gray.500">Linked fleet owner</Text>
+                  <Box
+                    border="1px solid"
+                    borderColor="gray.200"
+                    borderRadius="lg"
+                    p={4}
+                  >
+                    <Text fontSize="xs" color="gray.500">
+                      Linked fleet owner
+                    </Text>
                     <Text fontWeight="700" mt={1}>
                       {selectedDriver.owner?.company_name ||
                         selectedDriver.owner?.users?.name ||
@@ -618,26 +627,42 @@ const Drivers = () => {
                       </Text>
                     ) : null}
                   </Box>
-                  <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
-                    <Text fontSize="xs" color="gray.500">Assigned vehicle</Text>
+                  <Box
+                    border="1px solid"
+                    borderColor="gray.200"
+                    borderRadius="lg"
+                    p={4}
+                  >
+                    <Text fontSize="xs" color="gray.500">
+                      Assigned vehicle
+                    </Text>
                     <Text fontWeight="700" mt={1}>
                       {getDriverVehicleLabel(selectedDriver)}
                     </Text>
                   </Box>
                 </SimpleGrid>
 
-                <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                <Box
+                  border="1px solid"
+                  borderColor="gray.200"
+                  borderRadius="lg"
+                  p={4}
+                >
                   <Flex justify="space-between" align="flex-start" gap={3}>
                     <Box>
-                      <Text fontSize="xs" color="gray.500">Route and directions</Text>
+                      <Text fontSize="xs" color="gray.500">
+                        Route and directions
+                      </Text>
                       <Text fontWeight="700" mt={1}>
                         {selectedDriver.route?.route_name || "No active route"}
                       </Text>
                       {selectedDriver.route ? (
                         <Text fontSize="sm" color="gray.600" mt={1}>
-                          {selectedDriver.route.start_location || "Start not recorded"}
+                          {selectedDriver.route.start_location ||
+                            "Start not recorded"}
                           {" → "}
-                          {selectedDriver.route.end_location || "Destination not recorded"}
+                          {selectedDriver.route.end_location ||
+                            "Destination not recorded"}
                         </Text>
                       ) : null}
                     </Box>
@@ -658,12 +683,19 @@ const Drivers = () => {
                   </Flex>
                 </Box>
 
-                <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                <Box
+                  border="1px solid"
+                  borderColor="gray.200"
+                  borderRadius="lg"
+                  p={4}
+                >
                   <Flex justify="space-between" align="center" mb={3}>
                     <Text fontWeight="700">Students on route</Text>
                     <Badge colorScheme="blue">
                       {selectedDriver.studentCount || 0}{" "}
-                      {(selectedDriver.studentCount || 0) === 1 ? "student" : "students"}
+                      {(selectedDriver.studentCount || 0) === 1
+                        ? "student"
+                        : "students"}
                     </Badge>
                   </Flex>
                   {selectedDriver.students?.length ? (
@@ -700,10 +732,17 @@ const Drivers = () => {
                   )}
                 </Box>
 
-                <Box border="1px solid" borderColor="gray.200" borderRadius="lg" p={4}>
+                <Box
+                  border="1px solid"
+                  borderColor="gray.200"
+                  borderRadius="lg"
+                  p={4}
+                >
                   <Flex justify="space-between" align="center" gap={3}>
                     <Box>
-                      <Text fontSize="xs" color="gray.500">Last known driver location</Text>
+                      <Text fontSize="xs" color="gray.500">
+                        Last known driver location
+                      </Text>
                       {selectedDriver.location ? (
                         <>
                           <Text fontWeight="600" mt={1}>
@@ -711,7 +750,8 @@ const Drivers = () => {
                             {selectedDriver.location.longitude}
                           </Text>
                           <Text fontSize="xs" color="gray.500" mt={1}>
-                            Updated {formatDate(selectedDriver.location.recorded_at)}
+                            Updated{" "}
+                            {formatDate(selectedDriver.location.recorded_at)}
                           </Text>
                         </>
                       ) : (

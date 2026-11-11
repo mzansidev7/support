@@ -1,5 +1,5 @@
-import React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import React, { useEffect } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useDisclosure } from "@chakra-ui/react";
 import LoginPage from "./components/login/LoginPage";
 import Dashboard from "./components/dashboard/Dashboard";
@@ -16,6 +16,7 @@ import Payments from "./components/dashboard/Payments";
 import SupportUsers from "./components/dashboard/SupportUsers";
 import Notifications from "./components/dashboard/Notifications";
 import DashboardLayout from "./components/layout/DashboardLayout";
+import { PresenceProvider } from "./presence/PresenceProvider";
 
 const getCachedSupportSession = () => {
     try {
@@ -30,33 +31,20 @@ const getCachedSupportSession = () => {
 
 const Main = () => {
     const { isOpen, onOpen, onClose } = useDisclosure();
-    // const [userData, setUserData] = useState(null);
+    const navigate = useNavigate();
 
-    // const navigate = useNavigate();
-
-    // const getUserFromLocalStorage = () => {
-    //     try {
-    //         const userStr = localStorage.getItem("user");
-    //         return userStr ? JSON.parse(userStr) : null;
-    //     } catch (error) {
-    //         console.error("Error retrieving user:", error);
-    //         return null;
-    //     }
-    // };
-
-    // useEffect(() => {
-    //     const user = getUserFromLocalStorage();
-    //     setUserData(user);
-    // }, []);
-
-    // useEffect(() => {
-    //     if (userData) {
-    //         navigate("/dashboard");
-    //     }
-    // }, [userData, navigate]);
+    useEffect(() => {
+        const handleSessionExpired = () => navigate("/", { replace: true });
+        window.addEventListener("support-auth-expired", handleSessionExpired);
+        return () =>
+            window.removeEventListener(
+                "support-auth-expired",
+                handleSessionExpired,
+            );
+    }, [navigate]);
 
     return (
-        <>
+        <PresenceProvider>
             <Routes>
                 <Route
                     path="/"
@@ -237,7 +225,7 @@ const Main = () => {
                     }
                 />
             </Routes>
-        </>
+        </PresenceProvider>
     );
 };
 

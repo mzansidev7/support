@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Alert,
@@ -45,7 +39,6 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiDownload,
-  FiHeart,
   FiInfo,
   FiMic,
   FiMessageCircle,
@@ -59,74 +52,20 @@ import {
   FiSquare,
   FiX,
 } from "react-icons/fi";
-import { useLocation, useNavigate } from "react-router-dom";
 import PageHeader from "./PageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
-import "./MessagesInbox.css";
-
-const API_URL = (
-  process.env.REACT_APP_API_URL ||
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:4000"
-    : "https://track-my-kid-server-production.up.railway.app")
-).replace(/\/$/, "");
-
-const apiRequest = async (path, options = {}) => {
-  const token = localStorage.getItem("token");
-  if (!token) {
-    throw new Error("Your support session has expired. Please sign in again.");
-  }
-  const isFormData = options.body instanceof FormData;
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body && !isFormData
-        ? { "Content-Type": "application/json" }
-        : {}),
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(result.message || result.error || "The request failed.");
-  }
-  return result;
-};
-
-const EMOJI_CATEGORIES = [
-  { name: "Smileys", icon: "😀", emojis: "😀 😃 😄 😁 😆 😅 😂 🤣 🥲 ☺️ 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😋 😛 😜 🤪 🤗 🤔 😎 🥳 😕 🙁 😮 😳 🥺 🥹 😢 😭 😱 😤 😡 🤬 😴 🤒 🤢 🤧 🥶 🥵 🤯 👻 💩".split(" ") },
-  { name: "People", icon: "👋", emojis: "👋 🤚 ✋ 🖐️ 👌 🤌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 👍 👎 👏 🙌 🫶 🙏 💪 🦾 🦵 👂 👃 👀 👶 🧒 🧑 👨 👩 🧓 🙋 🙆 🙅 🤷 🤦 💃 🕺 🏃 🚶".split(" ") },
-  { name: "Animals", icon: "🐻", emojis: "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🦆 🦉 🦇 🐺 🐴 🦄 🐝 🦋 🐞 🐢 🐍 🦎 🐙 🦑 🦀 🐠 🐟 🐬 🐳 🦈 🐘 🦒 🐕 🐈 🦜 🦢".split(" ") },
-  { name: "Food", icon: "🍕", emojis: "🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍒 🍑 🥭 🍍 🥝 🍅 🥑 🥦 🥕 🌽 🥐 🍞 🧀 🥚 🍳 🥞 🥓 🍔 🍟 🍕 🌮 🌯 🥗 🍝 🍜 🍣 🍱 🍰 🎂 🍪 🍩 🍫 🍿 ☕ 🧃 🥤 🍺 🍷".split(" ") },
-  { name: "Travel", icon: "🚗", emojis: "🚗 🚕 🚙 🚌 🏎️ 🚓 🚑 🚒 🚐 🚚 🚜 🛵 🏍️ 🚲 🛴 🚦 ⚓ ⛵ 🚤 🚢 ✈️ 🛫 🛬 🚁 🚀 🛸 🌍 🗺️ 🧭 🏔️ 🏕️ 🏖️ 🏝️ 🏠 🏢 🏥 🏫 🏰 🗼 🌅 🌆 🌉".split(" ") },
-  { name: "Activities", icon: "⚽", emojis: "⚽ 🏀 🏈 ⚾ 🎾 🏐 🏉 🎱 🏓 🏸 🥊 🥋 🛹 🛼 ⛸️ 🎿 🏂 🏋️ 🤼 🤸 🏇 🧘 🏄 🏊 🏆 🥇 🥈 🥉 🎖️ 🎨 🎬 🎤 🎧 🎹 🥁 🎷 🎸 🎻 🎲 🎯 🎳 🎮 🧩 🎉 🎊".split(" ") },
-  { name: "Objects", icon: "💡", emojis: "💌 💝 💖 💗 💓 💞 💕 💔 ❤️ 🧡 💛 💚 💙 💜 🖤 🤍 💯 💢 💥 💫 💦 💬 💭 💤 💻 📱 ☎️ 📷 🎥 💡 🔦 📚 📝 📌 ✂️ 🔒 🔑 🔨 🔧 🧰 💉 💊 🛏️ 🚿 🛒 🎁 🏷️".split(" ") },
-  { name: "Symbols", icon: "✅", emojis: "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ ☯️ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ ✅ ❎ ❌ ⭕ 🚫 ❗ ❓ ‼️ ⁉️ ⚠️ ➕ ➖ ➗ ✖️ ♾️ ✔️ ☑️ 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ ⭐ 🌟 ✨ ⚡ 🔥 💧 🌈 ☀️ 🌙".split(" ") },
-];
-const QUICK_MESSAGE_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
-const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
-const MAX_ATTACHMENTS_PER_MESSAGE = 20;
-const RECORDING_MIME_TYPES = [
-  "audio/webm;codecs=opus",
-  "audio/webm",
-  "audio/mp4",
-];
-const ALLOWED_ATTACHMENT_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "application/pdf",
-  "audio/mp4",
-  "audio/m4a",
-  "audio/mpeg",
-  "audio/aac",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/webm",
-  "audio/3gpp",
-]);
+import useMessagesInboxState from "../../hooks/useMessagesInboxState";
+import "../../styles/MessagesInbox.css";
+import { PresenceDot, PresenceStatus } from "../../presence/PresenceIndicator";
+import { apiRequest } from "../../utils/asyncStorage/apiRequest";
+import {
+  ALLOWED_ATTACHMENT_TYPES,
+  EMOJI_CATEGORIES,
+  MAX_ATTACHMENT_SIZE,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  QUICK_MESSAGE_REACTIONS,
+  RECORDING_MIME_TYPES,
+} from "../../helpers";
 
 const formatTime = (value, includeDate = false) => {
   if (!value) return "";
@@ -167,7 +106,9 @@ const getPreview = (content) => {
           ? "Photo"
           : attachment.mediaType === "audio"
             ? "Voice message"
-            : "File attachment";
+            : attachment.mediaType === "video"
+              ? "Video"
+              : "File attachment";
       return attachment.caption ? `${label}: ${attachment.caption}` : label;
     }
   } catch {
@@ -180,16 +121,16 @@ const roleLabel = (role) =>
   role === "group"
     ? "Group chat"
     : role === "driver"
-    ? "Driver"
-    : role === "client"
-      ? "Parent"
-      : role === "school"
-        ? "School"
-        : role === "owner"
-          ? "Fleet owner"
-          : role === "admin"
-            ? "Support team"
-            : "User";
+      ? "Driver"
+      : role === "client"
+        ? "Parent"
+        : role === "school"
+          ? "School"
+          : role === "owner"
+            ? "Fleet owner"
+            : role === "admin"
+              ? "Support team"
+              : "User";
 
 const userSchoolName = (user) =>
   user?.schools?.find((school) => school?.name)?.name ||
@@ -226,26 +167,110 @@ const attachmentUploadPath = (conversation, conversationId) => {
 const parseAttachment = (content) => {
   try {
     const attachment = JSON.parse(content);
-    if (attachment?.type === "attachment" && attachment.url) {
+    const normalize = (item) => {
+      if (!item || typeof item !== "object") return null;
+      const url = item.url || item.fileUrl || item.file_url;
+      if (typeof url !== "string") return null;
+      const mimeType = String(
+        item.mimeType || item.mime_type || "",
+      ).toLowerCase();
+      const rawDeclaredType = item.mediaType || item.media_type;
+      const declaredType =
+        typeof rawDeclaredType === "string"
+          ? rawDeclaredType.toLowerCase()
+          : "";
+      const extension = url.split("?")[0].split(".").pop()?.toLowerCase();
+      const mediaType = ["image", "audio", "video", "pdf"].includes(declaredType)
+        ? declaredType
+        : typeof declaredType === "string" && declaredType.startsWith("image/")
+          ? "image"
+          : typeof declaredType === "string" &&
+              declaredType.startsWith("audio/")
+            ? "audio"
+            : typeof declaredType === "string" &&
+                declaredType.startsWith("video/")
+              ? "video"
+            : mimeType.startsWith("image/")
+              ? "image"
+              : mimeType.startsWith("audio/")
+                ? "audio"
+                : mimeType.startsWith("video/")
+                  ? "video"
+                : mimeType === "application/pdf"
+                  ? "pdf"
+                  : ["jpg", "jpeg", "png", "gif", "webp"].includes(
+                        extension,
+                      )
+                    ? "image"
+                    : ["mp3", "m4a", "aac", "wav", "webm", "ogg", "3gp"].includes(
+                          extension,
+                        )
+                      ? "audio"
+                      : ["mp4", "mov", "m4v", "3gp"].includes(extension)
+                        ? "video"
+                      : extension === "pdf"
+                        ? "pdf"
+                        : null;
+      if (!mediaType) return null;
       return {
-        attachments: [attachment],
-        caption: attachment.caption || "",
+        ...item,
+        mediaType,
+        url,
+        name: item.name || item.fileName || "Attachment",
+        mimeType,
       };
-    }
-    if (
-      attachment?.type === "attachment_group" &&
-      Array.isArray(attachment.attachments) &&
-      attachment.attachments.length
-    ) {
-      return {
-        attachments: attachment.attachments.filter((item) => item?.url),
-        caption: attachment.caption || "",
-      };
-    }
-    return null;
+    };
+    const attachments = (
+      (attachment?.type === "attachment" ||
+        attachment?.url ||
+        attachment?.fileUrl ||
+        attachment?.file_url)
+        ? [normalize(attachment)]
+        : attachment?.type === "attachment_group" &&
+            Array.isArray(attachment.attachments)
+          ? attachment.attachments.map(normalize)
+          : []
+    ).filter(Boolean);
+    if (!attachments.length) return null;
+    return {
+      attachments,
+      caption: attachment.caption || "",
+    };
   } catch {
     return null;
   }
+};
+
+const formatAudioDuration = (value) => {
+  if (!Number.isFinite(value) || value < 0) return "--:--";
+  const seconds = Math.floor(value);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+};
+
+const InboxAudioAttachment = ({ item }) => {
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  return (
+    <div className="inbox-audio">
+      <audio
+        controls
+        preload="metadata"
+        src={item.url}
+        aria-label={item.name || "Voice message"}
+        onLoadedMetadata={(event) =>
+          setDuration(event.currentTarget.duration)
+        }
+        onTimeUpdate={(event) =>
+          setCurrentTime(event.currentTarget.currentTime)
+        }
+        onEnded={() => setCurrentTime(0)}
+      />
+      <span className="inbox-audio-duration">
+        {formatAudioDuration(currentTime)} / {formatAudioDuration(duration)}
+      </span>
+    </div>
+  );
 };
 
 const groupAdjacentAttachmentMessages = (messages) => {
@@ -337,7 +362,8 @@ const mergeServerMessages = (serverMessages, currentMessages) => {
       const pendingTime = new Date(pendingMessage.sent_at).getTime();
       return (
         pendingMessage.sender_id === serverMessage.sender_id &&
-        getMessageIdentity(pendingMessage) === getMessageIdentity(serverMessage) &&
+        getMessageIdentity(pendingMessage) ===
+          getMessageIdentity(serverMessage) &&
         Number.isFinite(serverTime) &&
         Number.isFinite(pendingTime) &&
         serverTime >= pendingTime - 15 * 1000 &&
@@ -357,117 +383,135 @@ const mergeServerMessages = (serverMessages, currentMessages) => {
 };
 
 const MessagesInbox = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const cacheScope = useMemo(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem("user") || "null");
-      return `admin:${user?.id || "unknown"}`;
-    } catch {
-      return "admin:unknown";
-    }
-  }, []);
-  const currentUserId = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "null")?.id || "";
-    } catch {
-      return "";
-    }
-  }, []);
-  const [conversations, setConversations] = useState(() => {
-    const cached = readMessageCache(`${cacheScope}:conversations`);
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [selectedId, setSelectedId] = useState(() => {
-    const cached = readMessageCache(`${cacheScope}:selected-conversation`);
-    return typeof cached === "string" ? cached : "";
-  });
-  const [messages, setMessages] = useState(() => {
-    const cachedId = readMessageCache(`${cacheScope}:selected-conversation`);
-    const cached = cachedId
-      ? readMessageCache(`${cacheScope}:messages:${cachedId}`)
-      : null;
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(() => {
-    const cached = readMessageCache(`${cacheScope}:conversations`);
-    return !Array.isArray(cached);
-  });
-  const [messageLoading, setMessageLoading] = useState(() => {
-    const cachedId = readMessageCache(`${cacheScope}:selected-conversation`);
-    const cached = cachedId
-      ? readMessageCache(`${cacheScope}:messages:${cachedId}`)
-      : null;
-    return !Array.isArray(cached);
-  });
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState("");
-  const [messageError, setMessageError] = useState("");
-  const [draft, setDraft] = useState("");
-  const [selectedAttachments, setSelectedAttachments] = useState([]);
-  const [emojiOpen, setEmojiOpen] = useState(false);
-  const [emojiCategory, setEmojiCategory] = useState(0);
-  const [emojiSearch, setEmojiSearch] = useState("");
-  const [reactionPickerMessageId, setReactionPickerMessageId] = useState("");
-  const [reactionPickerPosition, setReactionPickerPosition] = useState(null);
-  const [emojiPopupPosition, setEmojiPopupPosition] = useState(null);
-  const [recording, setRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [recordingSupported, setRecordingSupported] = useState(false);
-  const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
-  const [previewError, setPreviewError] = useState("");
-  const [downloadingPreview, setDownloadingPreview] = useState(false);
-  const [groupModalOpen, setGroupModalOpen] = useState(false);
-  const [groupUsers, setGroupUsers] = useState([]);
-  const [groupAnchorUserId, setGroupAnchorUserId] = useState("");
-  const [groupCandidates, setGroupCandidates] = useState([]);
-  const [groupMemberIds, setGroupMemberIds] = useState([]);
-  const [groupName, setGroupName] = useState("");
-  const [groupUsersLoading, setGroupUsersLoading] = useState(false);
-  const [groupCandidatesLoading, setGroupCandidatesLoading] = useState(false);
-  const [groupSaving, setGroupSaving] = useState(false);
-  const [groupError, setGroupError] = useState("");
-  const [groupManagementMode, setGroupManagementMode] = useState("");
-  const [groupManagementOpen, setGroupManagementOpen] = useState(false);
-  const [groupManagementUsers, setGroupManagementUsers] = useState([]);
-  const [groupManagementUserIds, setGroupManagementUserIds] = useState([]);
-  const [groupManagementLoading, setGroupManagementLoading] = useState(false);
-  const [groupManagementSaving, setGroupManagementSaving] = useState(false);
-  const [groupManagementError, setGroupManagementError] = useState("");
-  const [editGroupNameOpen, setEditGroupNameOpen] = useState(false);
-  const [editGroupName, setEditGroupName] = useState("");
-  const [editGroupNameSaving, setEditGroupNameSaving] = useState(false);
-  const [editGroupNameError, setEditGroupNameError] = useState("");
-  const [detailsRemoveMode, setDetailsRemoveMode] = useState(false);
-  const [detailsRemoveUserIds, setDetailsRemoveUserIds] = useState([]);
-  const [detailsRemoveError, setDetailsRemoveError] = useState("");
-  const [detailsRemoveSaving, setDetailsRemoveSaving] = useState(false);
-  const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
-  const [deleteGroupSaving, setDeleteGroupSaving] = useState(false);
-  const [deleteGroupError, setDeleteGroupError] = useState("");
-  const fileInputRef = useRef(null);
-  const textareaRef = useRef(null);
-  const emojiButtonRef = useRef(null);
-  const recorderRef = useRef(null);
-  const streamRef = useRef(null);
-  const selectedIdRef = useRef(selectedId);
-  const messagesConversationIdRef = useRef(selectedId);
-  const messagesListRef = useRef(null);
-  const handledTargetRef = useRef("");
-  const optimisticAttachmentUrlsRef = useRef([]);
-  const attachmentPreviewUrls = useMemo(
-    () => selectedAttachments.map((file) => URL.createObjectURL(file)),
-    [selectedAttachments],
-  );
-  const activeEmojiCategory = EMOJI_CATEGORIES[emojiCategory];
-  const visibleEmojis = emojiSearch.trim()
-    ? EMOJI_CATEGORIES.flatMap((category) => category.emojis).filter((emoji) =>
-        emoji.includes(emojiSearch.trim()),
-      )
-    : activeEmojiCategory.emojis;
+  const {
+    location,
+    navigate,
+    cacheScope,
+    currentUserId,
+    conversations,
+    setConversations,
+    selectedId,
+    setSelectedId,
+    messages,
+    setMessages,
+    search,
+    setSearch,
+    loading,
+    setLoading,
+    messageLoading,
+    setMessageLoading,
+    sending,
+    setSending,
+    error,
+    setError,
+    messageError,
+    setMessageError,
+    draft,
+    setDraft,
+    selectedAttachments,
+    setSelectedAttachments,
+    emojiOpen,
+    setEmojiOpen,
+    emojiCategory,
+    setEmojiCategory,
+    emojiSearch,
+    setEmojiSearch,
+    reactionPickerMessageId,
+    setReactionPickerMessageId,
+    reactionPickerPosition,
+    setReactionPickerPosition,
+    reactionRequestsRef,
+    reactionListRefs,
+    emojiPopupPosition,
+    setEmojiPopupPosition,
+    recording,
+    setRecording,
+    recordingSeconds,
+    setRecordingSeconds,
+    recordingSupported,
+    setRecordingSupported,
+    mobileThreadOpen,
+    setMobileThreadOpen,
+    imagePreview,
+    setImagePreview,
+    pdfPreviewUrl,
+    setPdfPreviewUrl,
+    previewError,
+    setPreviewError,
+    downloadingPreview,
+    setDownloadingPreview,
+    groupModalOpen,
+    setGroupModalOpen,
+    groupUsers,
+    setGroupUsers,
+    groupAnchorUserId,
+    setGroupAnchorUserId,
+    groupCandidates,
+    setGroupCandidates,
+    groupMemberIds,
+    setGroupMemberIds,
+    groupName,
+    setGroupName,
+    groupUsersLoading,
+    setGroupUsersLoading,
+    groupCandidatesLoading,
+    setGroupCandidatesLoading,
+    groupSaving,
+    setGroupSaving,
+    groupError,
+    setGroupError,
+    groupManagementMode,
+    setGroupManagementMode,
+    groupManagementOpen,
+    setGroupManagementOpen,
+    groupManagementUsers,
+    setGroupManagementUsers,
+    groupManagementUserIds,
+    setGroupManagementUserIds,
+    groupManagementLoading,
+    setGroupManagementLoading,
+    groupManagementSaving,
+    setGroupManagementSaving,
+    groupManagementError,
+    setGroupManagementError,
+    editGroupNameOpen,
+    setEditGroupNameOpen,
+    editGroupName,
+    setEditGroupName,
+    editGroupNameSaving,
+    setEditGroupNameSaving,
+    editGroupNameError,
+    setEditGroupNameError,
+    detailsRemoveMode,
+    setDetailsRemoveMode,
+    detailsRemoveUserIds,
+    setDetailsRemoveUserIds,
+    detailsRemoveError,
+    setDetailsRemoveError,
+    detailsRemoveSaving,
+    setDetailsRemoveSaving,
+    deleteGroupOpen,
+    setDeleteGroupOpen,
+    deleteGroupSaving,
+    setDeleteGroupSaving,
+    deleteGroupError,
+    setDeleteGroupError,
+    fileInputRef,
+    textareaRef,
+    emojiButtonRef,
+    recorderRef,
+    streamRef,
+    selectedIdRef,
+    messagesConversationIdRef,
+    messagesListRef,
+    handledTargetRef,
+    optimisticAttachmentUrlsRef,
+    attachmentPreviewUrls,
+    activeEmojiCategory,
+    visibleEmojis,
+    selectedConversation,
+    participant,
+  } = useMessagesInboxState({ emojiCategories: EMOJI_CATEGORIES });
 
   useEffect(() => {
     if (!emojiOpen) return undefined;
@@ -477,10 +521,7 @@ const MessagesInbox = () => {
       const rect = button.getBoundingClientRect();
       const width = Math.min(430, window.innerWidth - 24);
       setEmojiPopupPosition({
-        left: Math.max(
-          12,
-          Math.min(rect.left, window.innerWidth - width - 12),
-        ),
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
         bottom: Math.max(12, window.innerHeight - rect.top + 8),
         width,
       });
@@ -492,13 +533,7 @@ const MessagesInbox = () => {
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [emojiOpen]);
-
-  const selectedConversation = useMemo(
-    () => conversations.find((item) => String(item.id) === String(selectedId)),
-    [conversations, selectedId],
-  );
-  const participant = selectedConversation?.participant || {};
+  }, [emojiButtonRef, emojiOpen, setEmojiPopupPosition]);
 
   useEffect(() => {
     writeMessageCache(`${cacheScope}:conversations`, conversations);
@@ -507,19 +542,25 @@ const MessagesInbox = () => {
   useEffect(() => {
     if (!selectedId) return;
     writeMessageCache(`${cacheScope}:selected-conversation`, selectedId);
-    if (String(messagesConversationIdRef.current) !== String(selectedId)) return;
+    if (String(messagesConversationIdRef.current) !== String(selectedId))
+      return;
     writeMessageCache(`${cacheScope}:messages:${selectedId}`, messages);
-  }, [cacheScope, messages, selectedId]);
+  }, [cacheScope, messages, messagesConversationIdRef, selectedId]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
-  }, [selectedId]);
+  }, [selectedId, selectedIdRef]);
 
   useEffect(() => {
     setDetailsRemoveMode(false);
     setDetailsRemoveUserIds([]);
     setDetailsRemoveError("");
-  }, [selectedId]);
+  }, [
+    selectedId,
+    setDetailsRemoveError,
+    setDetailsRemoveMode,
+    setDetailsRemoveUserIds,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -534,11 +575,11 @@ const MessagesInbox = () => {
       1000,
     );
     return () => window.clearInterval(timer);
-  }, [recording]);
+  }, [recording, setRecordingSeconds]);
 
   useEffect(() => {
     setSelectedAttachments([]);
-  }, [selectedId]);
+  }, [selectedId, setSelectedAttachments]);
 
   useEffect(() => {
     setRecordingSupported(
@@ -560,7 +601,12 @@ const MessagesInbox = () => {
         URL.revokeObjectURL(url),
       );
     };
-  }, []);
+  }, [
+    optimisticAttachmentUrlsRef,
+    recorderRef,
+    setRecordingSupported,
+    streamRef,
+  ]);
 
   const loadConversations = useCallback(async () => {
     if (!conversations.length) setLoading(true);
@@ -577,9 +623,13 @@ const MessagesInbox = () => {
         current && sorted.some((item) => String(item.id) === String(current))
           ? current
           : String(
-              (sorted.some((item) => String(item.id) === String(
-                readMessageCache(`${cacheScope}:selected-conversation`),
-              ))
+              (sorted.some(
+                (item) =>
+                  String(item.id) ===
+                  String(
+                    readMessageCache(`${cacheScope}:selected-conversation`),
+                  ),
+              )
                 ? readMessageCache(`${cacheScope}:selected-conversation`)
                 : sorted[0]?.id) || "",
             ),
@@ -590,7 +640,14 @@ const MessagesInbox = () => {
     } finally {
       setLoading(false);
     }
-  }, [cacheScope, conversations.length]);
+  }, [
+    cacheScope,
+    conversations.length,
+    setConversations,
+    setError,
+    setLoading,
+    setSelectedId,
+  ]);
 
   const openGroupModal = async () => {
     setGroupModalOpen(true);
@@ -706,7 +763,10 @@ const MessagesInbox = () => {
   };
 
   const saveGroupMembership = async () => {
-    if (!selectedConversation?.is_group_conversation || !groupManagementUserIds.length) {
+    if (
+      !selectedConversation?.is_group_conversation ||
+      !groupManagementUserIds.length
+    ) {
       return;
     }
     setGroupManagementSaving(true);
@@ -749,7 +809,10 @@ const MessagesInbox = () => {
       setDetailsRemoveUserIds([]);
       await loadConversations();
     } catch (removeError) {
-      console.error("Could not remove group participants from details:", removeError);
+      console.error(
+        "Could not remove group participants from details:",
+        removeError,
+      );
       setDetailsRemoveError(removeError.message);
     } finally {
       setDetailsRemoveSaving(false);
@@ -814,7 +877,10 @@ const MessagesInbox = () => {
                 ...conversation,
                 group_name: result.groupName,
                 other_participant: conversation.other_participant
-                  ? { ...conversation.other_participant, name: result.groupName }
+                  ? {
+                      ...conversation.other_participant,
+                      name: result.groupName,
+                    }
                   : conversation.other_participant,
               }
             : conversation,
@@ -870,48 +936,67 @@ const MessagesInbox = () => {
         console.error("Could not open conversation from Users:", openError);
         setError(openError.message);
       });
-  }, [conversations, loadConversations, loading, location.state, navigate]);
+  }, [
+    conversations,
+    handledTargetRef,
+    loadConversations,
+    loading,
+    location.state,
+    navigate,
+    setError,
+    setMobileThreadOpen,
+    setSelectedId,
+  ]);
 
-  const loadMessages = useCallback(async (conversation) => {
-    if (!conversation?.id) {
-      setMessages([]);
-      return;
-    }
-    setMessageError("");
-    try {
-      const result = await apiRequest(
-        messagePath(conversation, conversation.id),
-      );
-      const nextMessages = Array.isArray(result) ? result : [];
-      if (String(selectedIdRef.current) === String(conversation.id)) {
-        setMessages((currentMessages) => {
-          const mergedMessages = mergeServerMessages(
-            nextMessages,
-            currentMessages,
-          );
+  const loadMessages = useCallback(
+    async (conversation) => {
+      if (!conversation?.id) {
+        setMessages([]);
+        return;
+      }
+      setMessageError("");
+      try {
+        const result = await apiRequest(
+          messagePath(conversation, conversation.id),
+        );
+        const nextMessages = Array.isArray(result) ? result : [];
+        if (String(selectedIdRef.current) === String(conversation.id)) {
+          setMessages((currentMessages) => {
+            const mergedMessages = mergeServerMessages(
+              nextMessages,
+              currentMessages,
+            );
+            writeMessageCache(
+              `${cacheScope}:messages:${conversation.id}`,
+              mergedMessages,
+            );
+            return mergedMessages;
+          });
+        } else {
           writeMessageCache(
             `${cacheScope}:messages:${conversation.id}`,
-            mergedMessages,
+            nextMessages,
           );
-          return mergedMessages;
-        });
-      } else {
-        writeMessageCache(
-          `${cacheScope}:messages:${conversation.id}`,
-          nextMessages,
-        );
+        }
+      } catch (loadError) {
+        console.error("Could not load conversation messages:", loadError);
+        if (String(selectedIdRef.current) === String(conversation.id)) {
+          setMessageError(loadError.message);
+        }
+      } finally {
+        if (String(selectedIdRef.current) === String(conversation.id)) {
+          setMessageLoading(false);
+        }
       }
-    } catch (loadError) {
-      console.error("Could not load conversation messages:", loadError);
-      if (String(selectedIdRef.current) === String(conversation.id)) {
-        setMessageError(loadError.message);
-      }
-    } finally {
-      if (String(selectedIdRef.current) === String(conversation.id)) {
-        setMessageLoading(false);
-      }
-    }
-  }, [cacheScope]);
+    },
+    [
+      cacheScope,
+      selectedIdRef,
+      setMessageError,
+      setMessageLoading,
+      setMessages,
+    ],
+  );
 
   useEffect(() => {
     if (!selectedConversation) {
@@ -937,7 +1022,14 @@ const MessagesInbox = () => {
       5000,
     );
     return () => window.clearInterval(timer);
-  }, [cacheScope, loadMessages, selectedConversation]);
+  }, [
+    cacheScope,
+    loadMessages,
+    selectedConversation,
+    messagesConversationIdRef,
+    setMessageLoading,
+    setMessages,
+  ]);
 
   useEffect(() => {
     const messageList = messagesListRef.current;
@@ -947,7 +1039,7 @@ const MessagesInbox = () => {
         behavior: "smooth",
       });
     }
-  }, [messages]);
+  }, [messages, messagesListRef]);
 
   useEffect(() => {
     if (!imagePreview || imagePreview.images.length < 2) return undefined;
@@ -957,8 +1049,7 @@ const MessagesInbox = () => {
         setImagePreview((current) => ({
           ...current,
           index:
-            (current.index - 1 + current.images.length) %
-            current.images.length,
+            (current.index - 1 + current.images.length) % current.images.length,
         }));
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
@@ -970,7 +1061,7 @@ const MessagesInbox = () => {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [imagePreview]);
+  }, [imagePreview, setImagePreview]);
 
   useEffect(() => {
     const attachment = imagePreview?.images[imagePreview.index];
@@ -1003,7 +1094,9 @@ const MessagesInbox = () => {
       .catch((error) => {
         if (error.name !== "AbortError") {
           console.error("Could not load PDF preview:", error);
-          setPreviewError("PDF preview could not be loaded. Try downloading it.");
+          setPreviewError(
+            "PDF preview could not be loaded. Try downloading it.",
+          );
         }
       });
 
@@ -1011,7 +1104,7 @@ const MessagesInbox = () => {
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [imagePreview]);
+  }, [imagePreview, setPdfPreviewUrl, setPreviewError]);
 
   const downloadPreviewAttachment = async () => {
     const attachment = imagePreview?.images[imagePreview.index];
@@ -1129,7 +1222,11 @@ const MessagesInbox = () => {
     conversation = selectedConversation,
     optimisticMessage,
   ) => {
-    if (!files.length || !conversation?.id || conversation.is_linked_conversation) {
+    if (
+      !files.length ||
+      !conversation?.id ||
+      conversation.is_linked_conversation
+    ) {
       return;
     }
     if (files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
@@ -1178,6 +1275,8 @@ const MessagesInbox = () => {
           ? "image"
           : file.type.startsWith("audio/")
             ? "audio"
+            : file.type.startsWith("video/")
+              ? "video"
             : "pdf",
       };
     });
@@ -1312,8 +1411,7 @@ const MessagesInbox = () => {
   };
 
   const startVoiceRecording = async () => {
-    if (!recordingSupported || !selectedConversation)
-      return;
+    if (!recordingSupported || !selectedConversation) return;
     setMessageError("");
     try {
       const mimeType = RECORDING_MIME_TYPES.find((type) =>
@@ -1385,51 +1483,55 @@ const MessagesInbox = () => {
   const toggleMessageReaction = async (message, emoji) => {
     if (
       !selectedConversation ||
-      String(message.id).startsWith("optimistic-")
+      String(message.sender_id) === String(currentUserId) ||
+      String(message.id).startsWith("optimistic-") ||
+      reactionRequestsRef.current.has(message.id)
     ) {
       return;
     }
+    reactionRequestsRef.current.add(message.id);
     const previousReactions = message.reactions || [];
-    const selected = previousReactions.find(
-      (reaction) => reaction.emoji === emoji,
+    const userId = String(currentUserId || "");
+    const previousUserReaction = previousReactions.find(
+      (reaction) =>
+        reaction.userIds?.some((id) => String(id) === userId) ||
+        reaction.reactedByMe,
     );
-    const userAlreadyReacted =
-      selected?.userIds?.includes(currentUserId) || selected?.reactedByMe;
-    const optimisticReactions = userAlreadyReacted
-      ? previousReactions
-          .map((reaction) =>
-            reaction.emoji === emoji
-              ? {
-                  ...reaction,
-                  count: reaction.count - 1,
-                  userIds: reaction.userIds?.filter(
-                    (id) => id !== currentUserId,
-                  ),
-                  reactedByMe: false,
-                }
-              : reaction,
-          )
-          .filter((reaction) => reaction.count > 0)
-      : selected
-        ? previousReactions.map((reaction) =>
-            reaction.emoji === emoji
-              ? {
-                  ...reaction,
-                  count: reaction.count + 1,
-                  userIds: [...(reaction.userIds || []), currentUserId],
-                  reactedByMe: true,
-                }
-              : reaction,
-          )
-        : [
-            ...previousReactions,
-            {
-              emoji,
-              count: 1,
-              userIds: [currentUserId],
-              reactedByMe: true,
-            },
-          ];
+    const removingReaction = previousUserReaction?.emoji === emoji;
+    let targetFound = false;
+    const optimisticReactions = previousReactions
+      .map((reaction) => {
+        const userReacted =
+          reaction.userIds?.some((id) => String(id) === userId) ||
+          reaction.reactedByMe;
+        const isTarget = reaction.emoji === emoji;
+        if (isTarget) targetFound = true;
+        const userIds = userReacted
+          ? (reaction.userIds || []).filter((id) => String(id) !== userId)
+          : [...(reaction.userIds || [])];
+        const addingReaction = isTarget && !removingReaction && !userReacted;
+        if (addingReaction && !userIds.some((id) => String(id) === userId)) {
+          userIds.push(currentUserId);
+        }
+        return {
+          ...reaction,
+          count:
+            reaction.count - (userReacted ? 1 : 0) + (addingReaction ? 1 : 0),
+          userIds,
+          reactedByMe:
+            (isTarget && !removingReaction) ||
+            (reaction.reactedByMe && !userReacted),
+        };
+      })
+      .filter((reaction) => reaction.count > 0);
+    if (!targetFound && !removingReaction) {
+      optimisticReactions.push({
+        emoji,
+        count: 1,
+        userIds: [currentUserId],
+        reactedByMe: true,
+      });
+    }
     setMessages((current) =>
       current.map((item) =>
         item.id === message.id
@@ -1456,7 +1558,10 @@ const MessagesInbox = () => {
         ),
       );
     } catch (reactionError) {
-      console.error("Could not update support message reaction:", reactionError);
+      console.error(
+        "Could not update support message reaction:",
+        reactionError,
+      );
       setMessages((current) =>
         current.map((item) =>
           item.id === message.id
@@ -1464,9 +1569,9 @@ const MessagesInbox = () => {
             : item,
         ),
       );
-      setMessageError(
-        reactionError.message || "Reaction could not be saved.",
-      );
+      setMessageError(reactionError.message || "Reaction could not be saved.");
+    } finally {
+      reactionRequestsRef.current.delete(message.id);
     }
   };
 
@@ -1480,7 +1585,10 @@ const MessagesInbox = () => {
     const popupWidth = 212;
     const popupHeight = 44;
     setReactionPickerPosition({
-      left: Math.max(8, Math.min(rect.right - popupWidth, window.innerWidth - popupWidth - 8)),
+      left: Math.max(
+        8,
+        Math.min(rect.right - popupWidth, window.innerWidth - popupWidth - 8),
+      ),
       top:
         rect.top >= popupHeight + 8
           ? rect.top - popupHeight - 8
@@ -1491,23 +1599,35 @@ const MessagesInbox = () => {
 
   const renderMessage = (message) => {
     const own = message.sender_id === currentUserId;
+    const isGroupChat = ["admin_group", "school_group"].includes(
+      selectedConversation?.conversation_type,
+    );
     const attachment = parseAttachment(message.content);
     const imageAttachments =
-      attachment?.attachments.filter((item) => item.mediaType === "image") || [];
+      attachment?.attachments.filter((item) => item.mediaType === "image") ||
+      [];
     return (
       <Flex
         key={message.id || `${message.sent_at}-${message.content}`}
         className={`inbox-message-row${own ? " is-own" : ""}`}
       >
         {!own && (
-          <Avatar
-            className="inbox-message-avatar"
-            name={message.users?.name || participant.name}
-            src={message.users?.avatar || participant.avatar}
-            size="xs"
-          />
+          <Box position="relative" flexShrink={0}>
+            <Avatar
+              className="inbox-message-avatar"
+              name={message.users?.name || participant.name}
+              src={
+                isGroupChat
+                  ? message.users?.avatar
+                  : message.users?.avatar || participant.avatar
+              }
+              size="xs"
+            />
+            <PresenceDot userId={message.sender_id} />
+          </Box>
         )}
-        <Box className={`inbox-message${own ? " is-own" : ""}`}>
+        <div className="inbox-message-content">
+          <Box className={`inbox-message${own ? " is-own" : ""}`}>
           {attachment ? (
             <Box className="inbox-attachment-group">
               {attachment.attachments.map((item, index) => {
@@ -1526,17 +1646,32 @@ const MessagesInbox = () => {
                       }
                       aria-label={`Preview image ${imageIndex + 1} of ${imageAttachments.length}`}
                     >
-                    <img
-                      src={item.url}
-                      alt={item.name || "Attachment"}
-                      referrerPolicy="no-referrer"
-                    />
+                      <img
+                        src={item.url}
+                        alt={item.name || "Attachment"}
+                        referrerPolicy="no-referrer"
+                      />
                     </button>
                   );
                 }
                 if (item.mediaType === "audio") {
                   return (
-                    <audio controls src={item.url} key={`${item.url}-${index}`} />
+                    <InboxAudioAttachment
+                      item={item}
+                      key={`${item.url}-${index}`}
+                    />
+                  );
+                }
+                if (item.mediaType === "video") {
+                  return (
+                    <video
+                      className="inbox-video-attachment"
+                      src={item.url}
+                      controls
+                      preload="metadata"
+                      aria-label={item.name || "Video attachment"}
+                      key={`${item.url}-${index}`}
+                    />
                   );
                 }
                 return (
@@ -1564,17 +1699,6 @@ const MessagesInbox = () => {
           )}
           {attachment?.caption && <Text mt={1}>{attachment.caption}</Text>}
           <div className={`inbox-message-footer${own ? " is-own" : ""}`}>
-            {/* Show reaction badges for both own and other messages next to the timestamp */}
-            {message.reactions?.length > 0 && (
-              <span
-                className="inbox-message-reaction-badges"
-                aria-label={own ? "Reactions to your message" : "Reactions to message"}
-              >
-                {message.reactions.map((reaction) => (
-                  <span key={reaction.emoji}>{reaction.emoji}</span>
-                ))}
-              </span>
-            )}
             <Text className="inbox-message-time">
               {formatTime(message.sent_at)}
               {own && !message.deliveryError && (
@@ -1587,28 +1711,52 @@ const MessagesInbox = () => {
                 </span>
               )}
             </Text>
-            {!own && (
-              <div className="inbox-message-reactions">
-                {(message.reactions || []).map((reaction) => {
-                  const selected =
-                    reaction.userIds?.includes(currentUserId) ||
-                    reaction.reactedByMe;
-                  return (
-                    <button
-                      type="button"
-                      key={reaction.emoji}
-                      className={`inbox-message-reaction${selected ? " is-selected" : ""}`}
-                      onClick={() =>
-                        void toggleMessageReaction(message, reaction.emoji)
+          </div>
+          {message.deliveryError && (
+            <Text className="inbox-message-error">Message not sent</Text>
+          )}
+          </Box>
+          <div className="inbox-message-reactions">
+            <div
+              className="inbox-message-reaction-list"
+              ref={(element) => {
+                if (element) {
+                  reactionListRefs.current.set(message.id, element);
+                  if ((message.reactions || []).length <= 1) {
+                    element.scrollLeft = 0;
+                  }
+                } else {
+                  reactionListRefs.current.delete(message.id);
+                }
+              }}
+            >
+              {(message.reactions || []).map((reaction) => {
+                const selected =
+                  reaction.userIds?.includes(currentUserId) ||
+                  reaction.reactedByMe;
+                return (
+                  <button
+                    type="button"
+                    key={reaction.emoji}
+                    className={`inbox-message-reaction${selected ? " is-selected" : ""}`}
+                    disabled={own}
+                    onClick={() => {
+                      if (!own) {
+                        void toggleMessageReaction(message, reaction.emoji);
                       }
-                      aria-label={`${reaction.emoji} reaction`}
-                      aria-pressed={Boolean(selected)}
-                    >
-                      <span>{reaction.emoji}</span>
-                    </button>
-                  );
-                })}
-                {reactionPickerMessageId === message.id && (
+                    }}
+                    aria-label={`${reaction.count} ${reaction.emoji} reaction${reaction.count === 1 ? "" : "s"}`}
+                    aria-pressed={Boolean(selected)}
+                  >
+                    <span>{reaction.emoji}</span>
+                    <small>{reaction.count}</small>
+                  </button>
+                );
+              })}
+            </div>
+            {!own && (
+              <>
+                {reactionPickerMessageId === message.id &&
                   createPortal(
                     <div
                       className="inbox-reaction-picker"
@@ -1628,46 +1776,35 @@ const MessagesInbox = () => {
                       ))}
                     </div>,
                     document.body,
-                  )
-                )}
+                  )}
                 {!String(message.id).startsWith("optimistic-") && (
-                  <>
-                    <button
-                      type="button"
-                      className={`inbox-message-reaction-like${message.reactions?.some((reaction) => reaction.emoji === "❤️" && (reaction.userIds?.includes(currentUserId) || reaction.reactedByMe)) ? " is-selected" : ""}`}
-                      onClick={() =>
-                        void toggleMessageReaction(message, "❤️")
-                      }
-                      aria-label="Like message"
-                    >
-                      <FiHeart />
-                    </button>
-                    <button
-                      type="button"
-                      className="inbox-message-reaction-add"
-                      onClick={(event) =>
-                        toggleReactionPicker(message.id, event)
-                      }
-                      aria-label="Add reaction"
-                      aria-expanded={reactionPickerMessageId === message.id}
-                    >
-                      <FiSmile />
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    className="inbox-message-reaction-add"
+                    onClick={(event) =>
+                      toggleReactionPicker(message.id, event)
+                    }
+                    aria-label="Add reaction"
+                    aria-expanded={reactionPickerMessageId === message.id}
+                  >
+                    <FiPlus />
+                  </button>
                 )}
-              </div>
+              </>
             )}
           </div>
-          {message.deliveryError && (
-            <Text className="inbox-message-error">Message not sent</Text>
-          )}
-        </Box>
+        </div>
       </Flex>
     );
   };
 
   return (
-    <Box className="messages-inbox-page">
+    <Box
+      className="messages-inbox-page"
+      p={{ base: 4, md: 5 }}
+      bg="gray.50"
+      borderColor="gray.200"
+    >
       <PageHeader
         eyebrow="MESSAGING"
         title="Conversations"
@@ -1753,7 +1890,12 @@ const MessagesInbox = () => {
                     {groupUsers.find(
                       (user) => String(user.id) === String(groupAnchorUserId),
                     )?.role === "school" ? (
-                      <Text as="span" ml={2} color="gray.500" fontWeight="normal">
+                      <Text
+                        as="span"
+                        ml={2}
+                        color="gray.500"
+                        fontWeight="normal"
+                      >
                         · School:{" "}
                         {userSchoolName(
                           groupUsers.find(
@@ -1994,7 +2136,9 @@ const MessagesInbox = () => {
                 groupManagementLoading || !groupManagementUserIds.length
               }
             >
-              {groupManagementMode === "add" ? "Add selected" : "Remove selected"}
+              {groupManagementMode === "add"
+                ? "Add selected"
+                : "Remove selected"}
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -2044,7 +2188,7 @@ const MessagesInbox = () => {
       </Modal>
 
       <Box
-        className={`messages-inbox-layout${mobileThreadOpen ? " has-selection" : ""}`}
+        className={`messages-inbox-layout${mobileThreadOpen ? " has-selection" : ""}${selectedConversation?.is_group_conversation ? " has-group-details" : ""}`}
       >
         <Box className="messages-inbox-list">
           <Flex className="messages-inbox-list-heading">
@@ -2086,11 +2230,16 @@ const MessagesInbox = () => {
                       setMobileThreadOpen(true);
                     }}
                   >
-                    <Avatar
-                      name={contact.name || contact.email}
-                      src={contact.avatar}
-                      size="sm"
-                    />
+                    <Box position="relative" flexShrink={0}>
+                      <Avatar
+                        name={contact.name || contact.email}
+                        src={contact.avatar}
+                        size="sm"
+                      />
+                      {contact.role !== "group" ? (
+                        <PresenceDot userId={contact.id} />
+                      ) : null}
+                    </Box>
                     <span className="messages-inbox-conversation-info">
                       <span className="messages-inbox-conversation-name">
                         {contact.name || contact.email || "Contact"}
@@ -2124,7 +2273,9 @@ const MessagesInbox = () => {
         <Box className="messages-inbox-thread">
           {selectedConversation ? (
             <>
-              <Flex className="messages-inbox-thread-header">
+              <Flex
+                className={`messages-inbox-thread-header${selectedConversation.is_group_conversation ? " is-group" : ""}`}
+              >
                 <IconButton
                   className="messages-inbox-mobile-back"
                   icon={<FiArrowLeft />}
@@ -2132,23 +2283,50 @@ const MessagesInbox = () => {
                   onClick={() => setMobileThreadOpen(false)}
                   variant="ghost"
                 />
-                <Avatar
-                  name={participant.name || participant.email}
-                  src={participant.avatar}
-                  size="sm"
-                />
-                <Box minW={0}>
-                  <Text fontWeight="700" noOfLines={1}>
+                <Box position="relative" flexShrink={0}>
+                  <Avatar
+                    className="messages-inbox-thread-avatar"
+                    name={participant.name || participant.email}
+                    src={participant.avatar}
+                    size="sm"
+                  />
+                  {!selectedConversation.is_group_conversation ? (
+                    <PresenceDot userId={participant.id} />
+                  ) : null}
+                </Box>
+                <Box className="messages-inbox-thread-identity" minW={0}>
+                  {selectedConversation.is_group_conversation && (
+                    <Text className="messages-inbox-thread-eyebrow">
+                      GROUP CHAT
+                    </Text>
+                  )}
+                  <Text className="messages-inbox-thread-name" noOfLines={1}>
                     {participant.name || participant.email || "Contact"}
                   </Text>
-                  <Text fontSize="xs" color="gray.500">
+                  <Text
+                    className="messages-inbox-thread-subtitle"
+                    noOfLines={1}
+                  >
                     {participant.role === "group" &&
                     selectedConversation.participants?.length
                       ? `${selectedConversation.participants.length} members`
                       : roleLabel(participant.role)}
                   </Text>
+                  {!selectedConversation.is_group_conversation ? (
+                    <PresenceStatus userId={participant.id} />
+                  ) : null}
                 </Box>
-                {selectedConversation.is_group_conversation ? (
+                {selectedConversation.is_group_conversation &&
+                  selectedConversation.participants?.length > 0 && (
+                    <Badge
+                      className="messages-inbox-thread-member-badge"
+                      colorScheme="blue"
+                      borderRadius="full"
+                    >
+                      {selectedConversation.participants.length} members
+                    </Badge>
+                  )}
+                {selectedConversation.can_manage_group ? (
                   <Menu>
                     <MenuButton
                       as={IconButton}
@@ -2241,12 +2419,22 @@ const MessagesInbox = () => {
                               controls
                               src={attachmentPreviewUrls[index]}
                             />
+                          ) : attachment.type.startsWith("video/") ? (
+                            <video
+                              className="messages-inbox-attachment-video"
+                              src={attachmentPreviewUrls[index]}
+                              muted
+                              preload="metadata"
+                            />
                           ) : (
                             <Box className="messages-inbox-attachment-file-icon">
                               <FiPaperclip />
                             </Box>
                           )}
-                          <Box className="messages-inbox-attachment-info" minW={0}>
+                          <Box
+                            className="messages-inbox-attachment-info"
+                            minW={0}
+                          >
                             <Text noOfLines={1} fontWeight="600">
                               {attachment.name}
                             </Text>
@@ -2262,7 +2450,9 @@ const MessagesInbox = () => {
                             aria-label={`Remove ${attachment.name}`}
                             onClick={() =>
                               setSelectedAttachments((current) =>
-                                current.filter((_, itemIndex) => itemIndex !== index),
+                                current.filter(
+                                  (_, itemIndex) => itemIndex !== index,
+                                ),
                               )
                             }
                             isDisabled={sending}
@@ -2288,22 +2478,44 @@ const MessagesInbox = () => {
                         onClick={() => setEmojiOpen((open) => !open)}
                         isDisabled={sending || recording}
                       />
-                      <IconButton
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        icon={<FiPaperclip />}
-                        aria-label="Attach image or PDF"
-                        onClick={() => fileInputRef.current?.click()}
-                        isDisabled={sending || recording}
-                      />
+                      <Menu>
+                        <MenuButton
+                          as={IconButton}
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          icon={<FiPaperclip />}
+                          aria-label="Choose attachment type"
+                          isDisabled={sending || recording}
+                        />
+                        <MenuList>
+                          {[
+                            ["Images", "image/*"],
+                            ["Videos", "video/*"],
+                            ["Images & videos", "image/*,video/*"],
+                            ["Files", "application/pdf,audio/*"],
+                          ].map(([label, accept]) => (
+                            <MenuItem
+                              key={label}
+                              onClick={() => {
+                                if (fileInputRef.current) {
+                                  fileInputRef.current.accept = accept;
+                                  fileInputRef.current.click();
+                                }
+                              }}
+                            >
+                              {label}
+                            </MenuItem>
+                          ))}
+                        </MenuList>
+                      </Menu>
                       <input
                         ref={fileInputRef}
                         className="messages-inbox-file-input"
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,audio/mp4,audio/m4a,audio/mpeg,audio/aac,audio/wav,audio/x-wav,audio/webm,audio/3gpp"
+                        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,audio/mp4,audio/m4a,audio/mpeg,audio/aac,audio/wav,audio/x-wav,audio/webm,audio/3gpp,video/mp4,video/quicktime,video/webm,video/3gpp,video/3gpp2"
                         multiple
-                        aria-label="Choose multiple images, PDFs, or audio files"
+                        aria-label="Choose multiple attachments"
                         onChange={(event) => {
                           const files = Array.from(event.target.files || []);
                           event.target.value = "";
@@ -2377,7 +2589,8 @@ const MessagesInbox = () => {
                       colorScheme="blue"
                       isLoading={sending}
                       isDisabled={
-                        (!draft.trim() && !selectedAttachments.length) || recording
+                        (!draft.trim() && !selectedAttachments.length) ||
+                        recording
                       }
                     >
                       Send
@@ -2400,99 +2613,113 @@ const MessagesInbox = () => {
                         className="messages-inbox-emoji-overlay"
                         onClick={() => setEmojiOpen(false)}
                       >
-                    <Box
-                      className="messages-inbox-emoji-picker"
-                      style={{
-                        position: "fixed",
-                        left: emojiPopupPosition.left,
-                        bottom: emojiPopupPosition.bottom,
-                        width: emojiPopupPosition.width,
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Flex className="messages-inbox-emoji-header" align="center">
-                        <Text fontSize="sm" fontWeight="700">Choose an emoji</Text>
-                        <IconButton
-                          type="button"
-                          size="xs"
-                          variant="ghost"
-                          icon={<FiX />}
-                          aria-label="Close emoji picker"
-                          onClick={() => setEmojiOpen(false)}
-                        />
-                      </Flex>
-                      <Input
-                        className="messages-inbox-emoji-search"
-                        size="sm"
-                        value={emojiSearch}
-                        onChange={(event) => setEmojiSearch(event.target.value)}
-                        placeholder="Search emojis"
-                        aria-label="Search emojis"
-                      />
-                      {!emojiSearch.trim() && (
-                        <HStack
-                          className="messages-inbox-emoji-categories"
-                          spacing={1}
+                        <Box
+                          className="messages-inbox-emoji-picker"
+                          style={{
+                            position: "fixed",
+                            left: emojiPopupPosition.left,
+                            bottom: emojiPopupPosition.bottom,
+                            width: emojiPopupPosition.width,
+                          }}
+                          onClick={(event) => event.stopPropagation()}
                         >
-                          {EMOJI_CATEGORIES.map((category, index) => (
-                            <Button
-                              key={category.name}
+                          <Flex
+                            className="messages-inbox-emoji-header"
+                            align="center"
+                          >
+                            <Text fontSize="sm" fontWeight="700">
+                              Choose an emoji
+                            </Text>
+                            <IconButton
                               type="button"
                               size="xs"
-                              variant={emojiCategory === index ? "solid" : "ghost"}
-                              colorScheme={emojiCategory === index ? "purple" : "gray"}
-                              onClick={() => setEmojiCategory(index)}
-                              aria-label={`${category.name} emoji`}
-                              aria-pressed={emojiCategory === index}
-                            >
-                              <span className="messages-inbox-emoji-category-icon">
-                                {category.icon}
-                              </span>
-                              <span>{category.name}</span>
-                            </Button>
-                          ))}
-                        </HStack>
-                      )}
-                      <Text className="messages-inbox-emoji-category-title">
-                        {emojiSearch.trim()
-                          ? "Search results"
-                          : activeEmojiCategory.name}
-                      </Text>
-                      <Box className="messages-inbox-emoji-grid">
-                        {visibleEmojis.length ? (
-                          visibleEmojis.map((emoji, index) => (
-                            <Button
-                              key={`${emoji}-${index}`}
-                              type="button"
                               variant="ghost"
-                              aria-label={`Insert ${emoji}`}
-                              onClick={() => {
-                                const textarea = textareaRef.current;
-                                const start =
-                                  textarea?.selectionStart ?? draft.length;
-                                const end = textarea?.selectionEnd ?? draft.length;
-                                const nextDraft =
-                                  draft.slice(0, start) + emoji + draft.slice(end);
-                                setDraft(nextDraft);
-                                requestAnimationFrame(() => {
-                                  textarea?.focus();
-                                  textarea?.setSelectionRange(
-                                    start + emoji.length,
-                                    start + emoji.length,
-                                  );
-                                });
-                              }}
+                              icon={<FiX />}
+                              aria-label="Close emoji picker"
+                              onClick={() => setEmojiOpen(false)}
+                            />
+                          </Flex>
+                          <Input
+                            className="messages-inbox-emoji-search"
+                            size="sm"
+                            value={emojiSearch}
+                            onChange={(event) =>
+                              setEmojiSearch(event.target.value)
+                            }
+                            placeholder="Search emojis"
+                            aria-label="Search emojis"
+                          />
+                          {!emojiSearch.trim() && (
+                            <HStack
+                              className="messages-inbox-emoji-categories"
+                              spacing={1}
                             >
-                              {emoji}
-                            </Button>
-                          ))
-                        ) : (
-                          <Text className="messages-inbox-emoji-no-results">
-                            No matching emojis
+                              {EMOJI_CATEGORIES.map((category, index) => (
+                                <Button
+                                  key={category.name}
+                                  type="button"
+                                  size="xs"
+                                  variant={
+                                    emojiCategory === index ? "solid" : "ghost"
+                                  }
+                                  colorScheme={
+                                    emojiCategory === index ? "purple" : "gray"
+                                  }
+                                  onClick={() => setEmojiCategory(index)}
+                                  aria-label={`${category.name} emoji`}
+                                  aria-pressed={emojiCategory === index}
+                                >
+                                  <span className="messages-inbox-emoji-category-icon">
+                                    {category.icon}
+                                  </span>
+                                  <span>{category.name}</span>
+                                </Button>
+                              ))}
+                            </HStack>
+                          )}
+                          <Text className="messages-inbox-emoji-category-title">
+                            {emojiSearch.trim()
+                              ? "Search results"
+                              : activeEmojiCategory.name}
                           </Text>
-                        )}
-                      </Box>
-                    </Box>
+                          <Box className="messages-inbox-emoji-grid">
+                            {visibleEmojis.length ? (
+                              visibleEmojis.map((emoji, index) => (
+                                <Button
+                                  key={`${emoji}-${index}`}
+                                  type="button"
+                                  variant="ghost"
+                                  aria-label={`Insert ${emoji}`}
+                                  onClick={() => {
+                                    const textarea = textareaRef.current;
+                                    const start =
+                                      textarea?.selectionStart ?? draft.length;
+                                    const end =
+                                      textarea?.selectionEnd ?? draft.length;
+                                    const nextDraft =
+                                      draft.slice(0, start) +
+                                      emoji +
+                                      draft.slice(end);
+                                    setDraft(nextDraft);
+                                    requestAnimationFrame(() => {
+                                      textarea?.focus();
+                                      textarea?.setSelectionRange(
+                                        start + emoji.length,
+                                        start + emoji.length,
+                                      );
+                                    });
+                                  }}
+                                >
+                                  {emoji}
+                                </Button>
+                              ))
+                            ) : (
+                              <Text className="messages-inbox-emoji-no-results">
+                                No matching emojis
+                              </Text>
+                            )}
+                          </Box>
+                        </Box>
                       </div>,
                       document.body,
                     )}
@@ -2507,178 +2734,275 @@ const MessagesInbox = () => {
           )}
         </Box>
 
-        <Box className="messages-inbox-details">
-          <Flex className="messages-inbox-details-heading">
-            <Text>Details</Text>
-            <FiMoreHorizontal />
-          </Flex>
-          {selectedConversation ? (
-            <VStack align="stretch" spacing={3}>
-              <Box className="messages-inbox-detail-card">
-                <Text className="messages-inbox-detail-title">
-                  General info
+        {selectedConversation?.is_group_conversation ? (
+          <Box className="messages-inbox-details">
+            <Flex className="messages-inbox-details-heading">
+              <Box>
+                <Text className="messages-inbox-details-eyebrow">
+                  GROUP CHAT
                 </Text>
-                <HStack align="flex-start" spacing={3}>
-                  <Avatar
-                    name={participant.name || participant.email}
-                    size="sm"
-                  />
-                  <Box minW={0}>
-                    <Text fontWeight="700" fontSize="sm" noOfLines={2}>
-                      {participant.name || "Unnamed user"}
-                    </Text>
-                    <Text fontSize="xs" color="gray.600" wordBreak="break-word">
-                      {participant.email || "No email provided"}
-                    </Text>
-                  </Box>
-                </HStack>
-                <Text className="messages-inbox-detail-line">
-                  {roleLabel(participant.role)}
-                </Text>
-                {participant.phone && (
-                  <Text className="messages-inbox-detail-line">
-                    {participant.phone}
+                <Text>Details</Text>
+              </Box>
+              <Badge colorScheme="blue" borderRadius="full" px={2}>
+                {selectedConversation.participants?.length || 0} members
+              </Badge>
+            </Flex>
+            {selectedConversation ? (
+              <VStack
+                className="messages-inbox-details-content"
+                align="stretch"
+                spacing={3}
+              >
+                <Box className="messages-inbox-detail-card messages-inbox-group-summary">
+                  <Text className="messages-inbox-detail-title">
+                    General info
                   </Text>
-                )}
-                <Text className="messages-inbox-detail-line">
-                  {selectedConversation.is_linked_conversation
-                    ? "Linked conversation · read only"
-                    : selectedConversation.is_group_conversation
-                      ? "Group chat"
-                      : selectedConversation.conversation_type === "admin_driver"
-                      ? "Direct driver support chat"
-                      : "Direct support chat"}
-                </Text>
-                <Text className="messages-inbox-detail-line">
-                  Last message{" "}
-                  {formatTime(selectedConversation.last_message_at, true) ||
-                    "not available"}
-                </Text>
-                {selectedConversation.is_group_conversation ? (
-                  <Box mt={4}>
-                    <Flex
-                      align="center"
-                      justify="space-between"
-                      gap={2}
-                      mb={2}
-                    >
-                      <Text className="messages-inbox-detail-title" mb={0}>
-                        Participants
+                  <HStack align="center" spacing={3}>
+                    <Avatar
+                      name={participant.name || participant.email}
+                      size="md"
+                    />
+                    <Box minW={0} flex="1">
+                      <Text className="messages-inbox-group-name" noOfLines={2}>
+                        {participant.name || "Unnamed user"}
                       </Text>
-                      {detailsRemoveMode ? (
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="ghost"
-                          colorScheme="gray"
-                          onClick={() => {
-                            setDetailsRemoveMode(false);
-                            setDetailsRemoveUserIds([]);
-                            setDetailsRemoveError("");
-                          }}
-                          isDisabled={detailsRemoveSaving}
-                        >
-                          Cancel
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="link"
-                          colorScheme="red"
-                          onClick={() => {
-                            setDetailsRemoveMode(true);
-                            setDetailsRemoveUserIds([]);
-                            setDetailsRemoveError("");
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </Flex>
-                    {detailsRemoveError ? (
-                      <Alert status="error" borderRadius="md" mb={2}>
-                        <AlertIcon />
-                        <Text fontSize="xs">{detailsRemoveError}</Text>
-                      </Alert>
-                    ) : null}
-                    <VStack align="stretch" spacing={2}>
-                      {(selectedConversation.participants || []).map((member) => {
-                        const canRemove =
-                          member.role !== "admin" &&
-                          String(member.id) !== String(currentUserId);
-                        return (
-                          <HStack key={member.id} spacing={2}>
-                            {detailsRemoveMode && canRemove ? (
-                              <Checkbox
-                                size="sm"
-                                isChecked={detailsRemoveUserIds.includes(
-                                  String(member.id),
-                                )}
-                                onChange={(event) =>
-                                  setDetailsRemoveUserIds((current) =>
-                                    event.target.checked
-                                      ? [...current, String(member.id)]
-                                      : current.filter(
-                                          (id) => id !== String(member.id),
-                                        ),
-                                  )
-                                }
-                                isDisabled={detailsRemoveSaving}
-                                aria-label={`Select ${member.name || member.email || "participant"} for removal`}
-                              />
-                            ) : null}
-                            <Avatar
-                              name={member.name || member.email}
-                              src={member.avatar}
-                              size="xs"
-                            />
-                            <Box minW={0}>
-                              <Text fontSize="sm" noOfLines={1}>
-                                {member.name || member.email || "Participant"}
-                              </Text>
-                              <Text fontSize="xs" color="gray.500">
-                                {roleLabel(member.role)}
-                              </Text>
-                            </Box>
-                          </HStack>
-                        );
-                      })}
-                    </VStack>
-                    {detailsRemoveMode ? (
-                      <Button
-                        mt={3}
-                        size="sm"
-                        colorScheme="red"
-                        onClick={() => void removeDetailsParticipants()}
-                        isLoading={detailsRemoveSaving}
-                        isDisabled={!detailsRemoveUserIds.length}
+                      <Text className="messages-inbox-group-subtitle">
+                        Group conversation
+                      </Text>
+                    </Box>
+                  </HStack>
+                  <Text className="messages-inbox-group-last-message">
+                    Last activity
+                    <span>
+                      {formatTime(selectedConversation.last_message_at, true) ||
+                        "Not available"}
+                    </span>
+                  </Text>
+                  {selectedConversation.is_group_conversation ? (
+                    <Box className="messages-inbox-participants-section">
+                      <Flex
+                        className="messages-inbox-participants-heading"
+                        align="center"
+                        justify="space-between"
+                        gap={2}
                       >
-                        Remove selected
-                      </Button>
-                    ) : null}
-                  </Box>
-                ) : null}
-              </Box>
-              <Box className="messages-inbox-detail-card">
-                <Text className="messages-inbox-detail-title">
-                  Conversation
-                </Text>
-                <Text className="messages-inbox-detail-line">
-                  {messages.length}{" "}
-                  {messages.length === 1 ? "message" : "messages"} loaded
-                </Text>
-                <Text className="messages-inbox-detail-line">
-                  {Number(selectedConversation.unread_count) || 0} unread
-                </Text>
-              </Box>
-            </VStack>
-          ) : (
-            <Text className="messages-inbox-empty">
-              Contact details appear here when a conversation is selected.
-            </Text>
-          )}
-        </Box>
+                        <Box>
+                          <Text className="messages-inbox-detail-title" mb={0}>
+                            Participants
+                          </Text>
+                          <Text className="messages-inbox-participant-count">
+                            {selectedConversation.participants?.length || 0}{" "}
+                            people
+                          </Text>
+                        </Box>
+                        {selectedConversation.can_manage_group &&
+                        detailsRemoveMode ? (
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="gray"
+                            onClick={() => {
+                              setDetailsRemoveMode(false);
+                              setDetailsRemoveUserIds([]);
+                              setDetailsRemoveError("");
+                            }}
+                            isDisabled={detailsRemoveSaving}
+                          >
+                            Cancel
+                          </Button>
+                        ) : selectedConversation.can_manage_group ? (
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="link"
+                            colorScheme="red"
+                            onClick={() => {
+                              setDetailsRemoveMode(true);
+                              setDetailsRemoveUserIds([]);
+                              setDetailsRemoveError("");
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        ) : null}
+                      </Flex>
+                      {detailsRemoveError ? (
+                        <Alert
+                          status="error"
+                          borderRadius="md"
+                          mb={2}
+                          className="messages-inbox-group-error"
+                        >
+                          <AlertIcon />
+                          <Text fontSize="xs">{detailsRemoveError}</Text>
+                        </Alert>
+                      ) : null}
+                      <VStack
+                        className="messages-inbox-participant-list"
+                        align="stretch"
+                        spacing={0}
+                      >
+                        {[...(selectedConversation.participants || [])]
+                          .sort((first, second) => {
+                            const firstIsCurrentUser =
+                              String(first.id) === String(currentUserId);
+                            const secondIsCurrentUser =
+                              String(second.id) === String(currentUserId);
+                            return (
+                              Number(secondIsCurrentUser) -
+                              Number(firstIsCurrentUser)
+                            );
+                          })
+                          .map((member) => {
+                            const isCurrentUser =
+                              String(member.id) === String(currentUserId);
+                            const canRemove =
+                              member.role !== "admin" && !isCurrentUser;
+                            const reactionActivity = messages
+                              .flatMap((message) =>
+                                (message.reactions || [])
+                                  .filter((reaction) =>
+                                    reaction.userIds?.some(
+                                      (userId) =>
+                                        String(userId) === String(member.id),
+                                    ),
+                                  )
+                                  .map((reaction) => ({
+                                    message,
+                                    emoji: reaction.emoji,
+                                  })),
+                              )
+                              .slice(-3)
+                              .reverse();
+                            return (
+                              <HStack
+                                className="messages-inbox-participant-row"
+                                key={member.id}
+                                spacing={2}
+                                align="flex-start"
+                              >
+                                {selectedConversation.can_manage_group &&
+                                detailsRemoveMode &&
+                                canRemove ? (
+                                  <Checkbox
+                                    mt={1}
+                                    size="sm"
+                                    isChecked={detailsRemoveUserIds.includes(
+                                      String(member.id),
+                                    )}
+                                    onChange={(event) =>
+                                      setDetailsRemoveUserIds((current) =>
+                                        event.target.checked
+                                          ? [...current, String(member.id)]
+                                          : current.filter(
+                                              (id) => id !== String(member.id),
+                                            ),
+                                      )
+                                    }
+                                    isDisabled={detailsRemoveSaving}
+                                    aria-label={`Select ${member.name || member.email || "participant"} for removal`}
+                                  />
+                                ) : null}
+                                <Box position="relative" flexShrink={0}>
+                                  <Avatar
+                                    className="messages-inbox-participant-avatar"
+                                    name={member.name || member.email}
+                                    src={member.avatar}
+                                    size="xs"
+                                  />
+                                  <PresenceDot userId={member.id} />
+                                </Box>
+                                <Box
+                                  className="messages-inbox-participant-info"
+                                  minW={0}
+                                  flex="1"
+                                >
+                                  <HStack
+                                    className="messages-inbox-participant-name"
+                                    spacing={1.5}
+                                    minW={0}
+                                  >
+                                    <Text fontSize="sm" noOfLines={1}>
+                                      {member.name ||
+                                        member.email ||
+                                        "Participant"}
+                                    </Text>
+                                    {isCurrentUser ? (
+                                      <Badge
+                                        className="messages-inbox-you-badge"
+                                        flexShrink={0}
+                                        colorScheme="blue"
+                                        borderRadius="full"
+                                        fontSize="9px"
+                                        px={1.5}
+                                      >
+                                        You
+                                      </Badge>
+                                    ) : null}
+                                  </HStack>
+                                  <Text fontSize="xs" color="gray.500">
+                                    {roleLabel(member.role)}
+                                  </Text>
+                                  <PresenceStatus userId={member.id} />
+                                  {reactionActivity.map(
+                                    ({ message, emoji }) => (
+                                      <Text
+                                        key={`${member.id}-${message.id}-${emoji}`}
+                                        className="messages-inbox-participant-reaction"
+                                        title={message.sent_at || ""}
+                                      >
+                                        <span className="messages-inbox-reaction-emoji">
+                                          {emoji}
+                                        </span>
+                                        <span>
+                                          Reacted to:{" "}
+                                          {getPreview(message.content)}
+                                        </span>
+                                      </Text>
+                                    ),
+                                  )}
+                                </Box>
+                              </HStack>
+                            );
+                          })}
+                      </VStack>
+                      {selectedConversation.can_manage_group &&
+                      detailsRemoveMode ? (
+                        <Button
+                          mt={3}
+                          size="sm"
+                          colorScheme="red"
+                          onClick={() => void removeDetailsParticipants()}
+                          isLoading={detailsRemoveSaving}
+                          isDisabled={!detailsRemoveUserIds.length}
+                        >
+                          Remove selected
+                        </Button>
+                      ) : null}
+                    </Box>
+                  ) : null}
+                </Box>
+                <Box className="messages-inbox-detail-card messages-inbox-conversation-stats">
+                  <Text className="messages-inbox-detail-title">
+                    Conversation
+                  </Text>
+                  <Text className="messages-inbox-detail-line">
+                    {messages.length}{" "}
+                    {messages.length === 1 ? "message" : "messages"} loaded
+                  </Text>
+                  <Text className="messages-inbox-detail-line">
+                    {Number(selectedConversation.unread_count) || 0} unread
+                  </Text>
+                </Box>
+              </VStack>
+            ) : (
+              <Text className="messages-inbox-empty">
+                Contact details appear here when a conversation is selected.
+              </Text>
+            )}
+          </Box>
+        ) : null}
       </Box>
       <Modal
         isOpen={Boolean(imagePreview)}

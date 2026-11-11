@@ -10,6 +10,14 @@ const PageHeader = ({ eyebrow, title, description, actions, meta }) => (
     mb={6}
     wrap="wrap"
     width="100%"
+    style={{
+      position: "sticky",
+      top: 0,
+      zIndex: 1,
+      backgroundColor: "white",
+      paddingTop: "1rem",
+      paddingBottom: "1rem",
+    }}
   >
     <Box minW={0}>
       {eyebrow ? (
@@ -27,7 +35,12 @@ const PageHeader = ({ eyebrow, title, description, actions, meta }) => (
         {title}
       </Heading>
       {description ? (
-        <Text color="gray.600" fontSize="sm" mt={1}>
+        <Text
+          color="gray.600"
+          fontSize="sm"
+          mt={1}
+          style={{ paddingLeft: "0.5rem" }}
+        >
           {description}
         </Text>
       ) : null}

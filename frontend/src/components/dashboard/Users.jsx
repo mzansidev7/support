@@ -64,7 +64,8 @@ import { readMessageCache, writeMessageCache } from "./messageCache";
 import {
   getCurrentUserIds,
   isCurrentUserId,
-} from "../../utils/currentUserIdentity";
+} from "../../utils/asyncStorage/currentUserIdentity";
+import { PresenceStatus } from "../../presence/PresenceIndicator";
 
 const API_URL = (
   process.env.REACT_APP_API_URL ||
@@ -222,6 +223,7 @@ const SchoolCommunityTable = ({
                         <Text fontSize="sm" color="gray.500" noOfLines={1}>
                           {user.email || user.phone || "No contact details"}
                         </Text>
+                        <PresenceStatus userId={user.id} />
                       </Box>
                     </HStack>
                   </Td>
@@ -650,7 +652,7 @@ const Users = () => {
   };
 
   return (
-    <Box px={{ base: 4, md: 6 }} py={6}>
+    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
       <PageHeader
         eyebrow="PLATFORM DIRECTORY"
         title="Users"
@@ -1022,6 +1024,7 @@ const Users = () => {
                             </Td>
                             <Td minW="180px">
                               <Text fontWeight="600">{parentName}</Text>
+                              <PresenceStatus userId={parentUser?.id} />
                               {parentIsCurrentUser ? (
                                 <Badge colorScheme="blue" mt={1}>
                                   You
@@ -1376,6 +1379,7 @@ const Users = () => {
                                     user.phone ||
                                     "No contact details"}
                                 </Text>
+                                <PresenceStatus userId={user.id} />
                               </Box>
                             </HStack>
                           </Td>
@@ -2060,7 +2064,10 @@ const Users = () => {
                                                 : stopParent?.users;
                                             return (
                                               <HStack
-                                                key={stop.id || `${stop.address}-${index}`}
+                                                key={
+                                                  stop.id ||
+                                                  `${stop.address}-${index}`
+                                                }
                                                 align="flex-start"
                                                 spacing={3}
                                               >

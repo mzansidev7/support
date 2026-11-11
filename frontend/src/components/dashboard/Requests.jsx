@@ -17,7 +17,6 @@ import {
   Input,
   Menu,
   MenuButton,
-  MenuDivider,
   MenuItem,
   MenuList,
   Modal,
@@ -57,8 +56,12 @@ import {
   FiMessageCircle,
   FiRefreshCw,
 } from "react-icons/fi";
+import L from "leaflet";
+import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import PageHeader from "./PageHeader";
+import { showConfirmationAlert } from "../../utils/sweetAlert.js";
 
 const API_URL = (
   process.env.REACT_APP_API_URL ||
@@ -68,6 +71,12 @@ const API_URL = (
 ).replace(/\/$/, "");
 const CACHE_PREFIX = "support-requests-cache";
 const REFRESH_INTERVAL_MS = 30_000;
+const emergencyAlertIcon = L.divIcon({
+  className: "support-emergency-marker",
+  html: '<span aria-hidden="true" style="display:flex;width:36px;height:36px;align-items:center;justify-content:center;border:3px solid #fff;border-radius:50%;background:#dc2626;box-shadow:0 3px 10px rgba(15,23,42,.35);color:#fff;font-size:18px;font-weight:800">!</span>',
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+});
 const REFRESH_RESOURCES = new Set([
   "support_tickets",
   "support_ticket_replies",
@@ -117,6 +126,108 @@ const formatDateTime = (value) => {
     : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 };
 
+const getAlertCoordinates = (alert) => {
+  if (
+    alert?.latitude == null ||
+    alert.latitude === "" ||
+    alert?.longitude == null ||
+    alert.longitude === ""
+  ) {
+    return null;
+  }
+  const latitude = Number(alert?.latitude);
+  const longitude = Number(alert?.longitude);
+  return Number.isFinite(latitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    Number.isFinite(longitude) &&
+    longitude >= -180 &&
+    longitude <= 180
+    ? [latitude, longitude]
+    : null;
+};
+
+const emergencySenderLabel = (role) => {
+  const labels = {
+    client: "Parent / guardian",
+    driver: "Driver",
+    school_admin: "School admin",
+    owner: "Transport provider",
+  };
+  return labels[role] || (role ? prettyLabel(role) : "App user");
+};
+
+const emergencyStatusAppearance = (alert) => {
+  if (alert?.status === "resolved") {
+    return { label: "Resolved", scheme: "green", background: "green.50" };
+  }
+  if (alert?.status === "in_progress" || alert?.attending_at) {
+    return {
+      label: "Support is attending",
+      scheme: "blue",
+      background: "blue.50",
+    };
+  }
+  return {
+    label: "Waiting for support",
+    scheme: "orange",
+    background: "orange.50",
+  };
+};
+
+const emergencyAssigneeName = (alert) => {
+  const assignedUser = Array.isArray(alert?.attending_user)
+    ? alert.attending_user[0]
+    : alert?.attending_user;
+  return assignedUser?.name || assignedUser?.email || null;
+};
+
+const emergencyConversationCacheKey = (alertId) =>
+  `${getCacheKey()}:sos-conversation:${alertId}`;
+const normalizeEmergencyConversationMessages = (value) => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.filter((message) => {
+    if (
+      !message ||
+      typeof message !== "object" ||
+      typeof message.id !== "string" ||
+      typeof message.author_user_id !== "string" ||
+      typeof message.body !== "string" ||
+      typeof message.created_at !== "string" ||
+      !Number.isFinite(Date.parse(message.created_at)) ||
+      seen.has(message.id)
+    ) {
+      return false;
+    }
+    seen.add(message.id);
+    return true;
+  });
+};
+const readEmergencyConversationCache = (alertId) => {
+  try {
+    const cachedMessages = JSON.parse(
+      localStorage.getItem(emergencyConversationCacheKey(alertId)) || "null",
+    );
+    return Array.isArray(cachedMessages)
+      ? normalizeEmergencyConversationMessages(cachedMessages)
+      : null;
+  } catch (cacheError) {
+    console.warn("Could not read cached SOS conversation:", cacheError);
+    return null;
+  }
+};
+const writeEmergencyConversationCache = (alertId, messages) => {
+  try {
+    localStorage.setItem(
+      emergencyConversationCacheKey(alertId),
+      JSON.stringify(normalizeEmergencyConversationMessages(messages)),
+    );
+  } catch (cacheError) {
+    console.warn("Could not cache SOS conversation:", cacheError);
+  }
+};
+
 const statusColor = (status) => {
   if (["resolved", "closed", "approved"].includes(status)) return "green";
   if (["in_progress"].includes(status)) return "blue";
@@ -156,11 +267,19 @@ const getAdminRole = () => {
     return "analyst";
   }
 };
+const getCurrentUserId = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null")?.id || null;
+  } catch {
+    return null;
+  }
+};
 const authHeaderKey = "Authorization";
 
 const Requests = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const adminRole = getAdminRole();
+  const currentUserId = getCurrentUserId();
   const isSuperAdmin = adminRole === "super_admin";
   const canManageRequests = ["super_admin", "support", "operations"].includes(
     adminRole,
@@ -196,17 +315,44 @@ const Requests = () => {
   const [currentStaffId, setCurrentStaffId] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  const [activeTab, setActiveTab] = useState(() =>
-    searchParams.get("tab") === "incidents"
-      ? 1
-      : searchParams.get("tab") === "schools"
-        ? 2
-        : 0,
+  const [emergencyAlerts, setEmergencyAlerts] = useState(
+    cached.current?.emergencyAlerts || [],
   );
+  const [emergencyAlertPage, setEmergencyAlertPage] = useState(1);
+  const [emergencyAssignees, setEmergencyAssignees] = useState([]);
+  const [emergencyAlertsError, setEmergencyAlertsError] = useState("");
+  const [liveChats, setLiveChats] = useState([]);
+  const [selectedLiveChat, setSelectedLiveChat] = useState(null);
+  const [liveChatMessages, setLiveChatMessages] = useState([]);
+  const [liveChatDraft, setLiveChatDraft] = useState("");
+  const [liveChatError, setLiveChatError] = useState("");
+  const [liveChatsLoading, setLiveChatsLoading] = useState(false);
+  const [liveChatSending, setLiveChatSending] = useState(false);
+  const [markingAllSupportAlertsRead, setMarkingAllSupportAlertsRead] =
+    useState(false);
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "incidents") return 1;
+    if (tab === "schools") return 2;
+    if (tab === "sos") return 3;
+    if (tab === "chats") return 4;
+    return 0;
+  });
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const [selectedEmergencyAlert, setSelectedEmergencyAlert] = useState(null);
+  const [emergencyConversationMessages, setEmergencyConversationMessages] =
+    useState([]);
+  const [emergencyConversationLoading, setEmergencyConversationLoading] =
+    useState(false);
+  const [emergencyConversationError, setEmergencyConversationError] =
+    useState("");
+  const [emergencyReplyDraft, setEmergencyReplyDraft] = useState("");
+  const [emergencyReplySending, setEmergencyReplySending] = useState(false);
+  const [emergencyStatusUpdating, setEmergencyStatusUpdating] = useState(false);
   const selectedIncidentRef = useRef(selectedIncident);
   selectedIncidentRef.current = selectedIncident;
+  const previousTabRef = useRef(0);
   const [selectedSchool, setSelectedSchool] = useState(null);
   const [incidentEscalationNote, setIncidentEscalationNote] = useState("");
   const [replies, setReplies] = useState([]);
@@ -216,6 +362,7 @@ const Requests = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const ticketDisclosure = useDisclosure();
   const incidentDisclosure = useDisclosure();
+  const emergencyAlertDisclosure = useDisclosure();
   const schoolDisclosure = useDisclosure();
   const [loading, setLoading] = useState(!cached.current);
   const [refreshing, setRefreshing] = useState(false);
@@ -223,26 +370,52 @@ const Requests = () => {
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [pendingAction, setPendingAction] = useState("");
   const inFlight = useRef(false);
+  const handledNotificationRef = useRef(null);
+  const openTicketRef = useRef(null);
+  const openIncidentRef = useRef(null);
   const selectedTicketRef = useRef(selectedTicket);
   selectedTicketRef.current = selectedTicket;
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    setActiveTab(tab === "incidents" ? 1 : tab === "schools" ? 2 : 0);
+    const nextTab =
+      tab === "incidents"
+        ? 1
+        : tab === "schools"
+          ? 2
+          : tab === "sos"
+            ? 3
+            : tab === "chats"
+              ? 4
+              : 0;
+    if (nextTab !== 4) previousTabRef.current = nextTab;
+    setActiveTab(nextTab);
   }, [searchParams]);
 
   const handleTabChange = (index) => {
+    if (index !== 4) previousTabRef.current = index;
     setActiveTab(index);
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
         if (index === 1) next.set("tab", "incidents");
         else if (index === 2) next.set("tab", "schools");
+        else if (index === 3) next.set("tab", "sos");
+        else if (index === 4) next.set("tab", "chats");
         else next.delete("tab");
         return next;
       },
       { replace: true },
     );
+  };
+
+  const toggleOneToOneChats = () => {
+    if (activeTab === 4) {
+      handleTabChange(previousTabRef.current);
+      return;
+    }
+    previousTabRef.current = activeTab;
+    handleTabChange(4);
   };
 
   useEffect(() => {
@@ -277,18 +450,28 @@ const Requests = () => {
         incidentsResponse.json(),
         schoolsResponse.json(),
       ]);
-      const [staffResponse, metricsResponse, notificationsResponse] =
-        await Promise.all([
-          fetch(`${API_URL}/admin/support-staff`, { headers }),
-          fetch(`${API_URL}/admin/support-metrics`, { headers }),
-          fetch(`${API_URL}/admin/support-notifications`, { headers }),
-        ]);
-      const [staffResult, metricsResult, notificationsResult] =
-        await Promise.all([
-          staffResponse.json(),
-          metricsResponse.json(),
-          notificationsResponse.json(),
-        ]);
+      const [
+        staffResponse,
+        metricsResponse,
+        notificationsResponse,
+        emergencyAlertsResponse,
+      ] = await Promise.all([
+        fetch(`${API_URL}/admin/support-staff`, { headers }),
+        fetch(`${API_URL}/admin/support-metrics`, { headers }),
+        fetch(`${API_URL}/admin/support-notifications`, { headers }),
+        fetch(`${API_URL}/admin/emergency-alerts?limit=100`, { headers }),
+      ]);
+      const [
+        staffResult,
+        metricsResult,
+        notificationsResult,
+        emergencyAlertsResult,
+      ] = await Promise.all([
+        staffResponse.json(),
+        metricsResponse.json(),
+        notificationsResponse.json(),
+        emergencyAlertsResponse.json(),
+      ]);
       const responses = [
         ticketsResponse,
         incidentsResponse,
@@ -317,6 +500,15 @@ const Requests = () => {
           "Unable to load support staff, metrics, or notifications.",
         );
       }
+      if (emergencyAlertsResponse.ok && Array.isArray(emergencyAlertsResult)) {
+        setEmergencyAlerts(emergencyAlertsResult);
+        setEmergencyAlertsError("");
+      } else {
+        setEmergencyAlertsError(
+          emergencyAlertsResult?.error ||
+            "Unable to load emergency SOS alerts.",
+        );
+      }
       setTickets(results[0]);
       setIncidents(results[1]);
       const selectedIncidentId = selectedIncidentRef.current?.id;
@@ -343,6 +535,119 @@ const Requests = () => {
       inFlight.current = false;
     }
   }, []);
+
+  const refreshLiveChats = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setLiveChatError(
+        "Your support session has expired. Please sign in again.",
+      );
+      return;
+    }
+    setLiveChatsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/support/live-chats`, {
+        headers: { [authHeaderKey]: `Bearer ${token}` },
+      });
+      const result = await response.json();
+      if (!response.ok || !Array.isArray(result)) {
+        throw new Error(result?.error || "Unable to load one-to-one chats.");
+      }
+      setLiveChats(result);
+      setSelectedLiveChat((current) =>
+        current
+          ? result.find((chat) => chat.id === current.id) || null
+          : result[0] || null,
+      );
+      setLiveChatError("");
+    } catch (requestError) {
+      console.error("Could not load support live chats:", requestError);
+      setLiveChatError(
+        requestError?.message || "Unable to load one-to-one chats.",
+      );
+    } finally {
+      setLiveChatsLoading(false);
+    }
+  }, []);
+
+  const refreshLiveChatMessages = useCallback(async (sessionId) => {
+    const token = localStorage.getItem("token");
+    if (!token || !sessionId) return;
+    try {
+      const response = await fetch(
+        `${API_URL}/support/live-chats/${encodeURIComponent(sessionId)}/messages`,
+        { headers: { [authHeaderKey]: `Bearer ${token}` } },
+      );
+      const result = await response.json();
+      if (!response.ok || !Array.isArray(result)) {
+        throw new Error(result?.error || "Unable to load chat messages.");
+      }
+      setLiveChatMessages(result);
+      setLiveChatError("");
+    } catch (requestError) {
+      console.error("Could not load support live chat messages:", requestError);
+      setLiveChatError(
+        requestError?.message || "Unable to load chat messages.",
+      );
+    }
+  }, []);
+
+  const sendLiveChatReply = async () => {
+    const message = liveChatDraft.trim();
+    const token = localStorage.getItem("token");
+    if (!token || !selectedLiveChat || !message || liveChatSending) return;
+    setLiveChatSending(true);
+    setLiveChatError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/support/live-chats/${encodeURIComponent(selectedLiveChat.id)}/messages`,
+        {
+          method: "POST",
+          headers: {
+            [authHeaderKey]: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message }),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.error || "Unable to send chat message.");
+      }
+      setLiveChatMessages((current) => [...current, result]);
+      setLiveChatDraft("");
+      void refreshLiveChats();
+    } catch (requestError) {
+      console.error("Could not send support live chat reply:", requestError);
+      setLiveChatError(requestError?.message || "Unable to send chat message.");
+    } finally {
+      setLiveChatSending(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== 4) return undefined;
+    void refreshLiveChats();
+    const interval = setInterval(() => void refreshLiveChats(), 10000);
+    return () => clearInterval(interval);
+  }, [activeTab, refreshLiveChats]);
+
+  useEffect(() => {
+    if (!selectedLiveChat) return undefined;
+    const sessionId = selectedLiveChat.id;
+    const initialLoad = setTimeout(
+      () => void refreshLiveChatMessages(sessionId),
+      0,
+    );
+    const interval = setInterval(
+      () => void refreshLiveChatMessages(sessionId),
+      5000,
+    );
+    return () => {
+      clearTimeout(initialLoad);
+      clearInterval(interval);
+    };
+  }, [selectedLiveChat, refreshLiveChatMessages]);
 
   const refreshTicketConversation = useCallback(async (ticketId) => {
     const token = localStorage.getItem("token");
@@ -413,6 +718,7 @@ const Requests = () => {
           currentStaffId,
           metrics,
           notifications,
+          emergencyAlerts,
           cachedAt: new Date().toISOString(),
         }),
       );
@@ -428,6 +734,7 @@ const Requests = () => {
     currentStaffId,
     metrics,
     notifications,
+    emergencyAlerts,
   ]);
 
   useEffect(() => {
@@ -564,15 +871,45 @@ const Requests = () => {
           current?.id === id ? { ...current, ...result } : current,
         );
       }
+      return true;
     } catch (actionError) {
       console.error("Could not update support request:", actionError);
       setError(actionError?.message || "Unable to update request status.");
+      return false;
     } finally {
       setPendingAction("");
     }
   };
 
-  const updateStatus = (kind, id, status) => patchRequest(kind, id, { status });
+  const updateStatus = async (kind, id, status) => {
+    if (["resolved", "closed"].includes(status)) {
+      incidentDisclosure.onClose();
+      const requestType = kind === "incident" ? "incident" : "ticket";
+      const result = await showConfirmationAlert({
+        title: `Close ${requestType} #: ${id.slice(0, 8)} ?`,
+        text: `This ${requestType} will be automatically removed 48 hours after closing.`,
+        confirmButtonText: `Close ${requestType}`,
+        denyButtonText: "Keep open",
+        zIndex: 2000,
+      });
+      if (!result.isConfirmed) return;
+    }
+    const updated = await patchRequest(kind, id, { status });
+    if (!updated) return;
+    if (
+      kind === "ticket" &&
+      selectedTicket?.id === id &&
+      ticketDisclosure.isOpen
+    ) {
+      ticketDisclosure.onClose();
+    } else if (
+      kind === "incident" &&
+      selectedIncident?.id === id &&
+      incidentDisclosure.isOpen
+    ) {
+      incidentDisclosure.onClose();
+    }
+  };
 
   const assignRequest = (kind, id, assigned_to) =>
     patchRequest(kind, id, { assigned_to: assigned_to || null });
@@ -771,6 +1108,9 @@ const Requests = () => {
     }
   };
 
+  openTicketRef.current = openTicket;
+  openIncidentRef.current = openIncident;
+
   const sendIncidentReply = async () => {
     if (!selectedIncident || !replyDraft.trim()) return;
     setPendingAction(`incident-reply:${selectedIncident.id}`);
@@ -825,9 +1165,451 @@ const Requests = () => {
         (item) => item.id === notification.entity_id,
       );
       if (incident) void openIncident(incident);
+    } else if (notification.entity_type === "emergency_alert") {
+      setActiveTab(3);
+      const alertRecord = emergencyAlerts.find(
+        (alert) => alert.id === notification.entity_id,
+      );
+      setSelectedEmergencyAlert(
+        alertRecord || {
+          id: notification.entity_id,
+          title: notification.title,
+          message: notification.message,
+          created_at: notification.created_at,
+        },
+      );
+      const cachedMessages = readEmergencyConversationCache(
+        notification.entity_id,
+      );
+      setEmergencyConversationMessages(cachedMessages || []);
+      setEmergencyConversationLoading(!cachedMessages);
+      setEmergencyConversationError("");
+      emergencyAlertDisclosure.onOpen();
+      if (!alertRecord && notification.entity_id) {
+        void (async () => {
+          try {
+            const token = localStorage.getItem("token");
+            if (!token) {
+              throw new Error(
+                "Your support session has expired. Please sign in again.",
+              );
+            }
+            const response = await fetch(
+              `${API_URL}/admin/emergency-alerts?id=${encodeURIComponent(
+                notification.entity_id,
+              )}`,
+              {
+                headers: {
+                  [authHeaderKey]: ["Bearer", token].join(" "),
+                },
+              },
+            );
+            const result = await response.json();
+            if (!response.ok || !Array.isArray(result)) {
+              throw new Error(
+                result?.error || "Unable to load emergency alert details.",
+              );
+            }
+            const details = result.find(
+              (alert) => alert.id === notification.entity_id,
+            );
+            if (!details) {
+              throw new Error("Emergency alert details were not found.");
+            }
+            setSelectedEmergencyAlert(details);
+          } catch (requestError) {
+            console.error(
+              "Could not load emergency alert details:",
+              requestError,
+            );
+            setError(
+              requestError?.message ||
+                "Unable to load emergency alert details.",
+            );
+          }
+        })();
+      }
     }
     if (!notification.read_at) void markNotificationRead(notification);
   };
+
+  useEffect(() => {
+    const alertId = selectedEmergencyAlert?.id;
+    if (!emergencyAlertDisclosure.isOpen || !alertId) return undefined;
+    let active = true;
+    let requestVersion = 0;
+    const loadConversation = async (showLoading = true) => {
+      const currentVersion = ++requestVersion;
+      if (showLoading && !readEmergencyConversationCache(alertId)) {
+        setEmergencyConversationLoading(true);
+      }
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          throw new Error(
+            "Your support session has expired. Please sign in again.",
+          );
+        }
+        const response = await fetch(
+          `${API_URL}/admin/emergency-alerts/${alertId}/messages`,
+          { headers: { [authHeaderKey]: ["Bearer", token].join(" ") } },
+        );
+        const result = await response.json();
+        if (!response.ok || !Array.isArray(result?.messages)) {
+          throw new Error(
+            result?.error || "Unable to load the SOS conversation.",
+          );
+        }
+        if (active && currentVersion === requestVersion) {
+          const messages = normalizeEmergencyConversationMessages(
+            result.messages,
+          );
+          setSelectedEmergencyAlert((current) =>
+            current?.id === alertId ? { ...current, ...result.alert } : current,
+          );
+          setEmergencyAlerts((current) =>
+            current.map((alert) =>
+              alert.id === alertId ? { ...alert, ...result.alert } : alert,
+            ),
+          );
+          setEmergencyConversationMessages(messages);
+          writeEmergencyConversationCache(alertId, messages);
+        }
+      } catch (conversationError) {
+        if (active && currentVersion === requestVersion) {
+          setEmergencyConversationError(
+            conversationError?.message ||
+              "Unable to load the SOS conversation.",
+          );
+        }
+      } finally {
+        if (active && currentVersion === requestVersion && showLoading) {
+          setEmergencyConversationLoading(false);
+        }
+      }
+    };
+
+    void loadConversation();
+    if (isSuperAdmin) {
+      const token = localStorage.getItem("token");
+      if (token) {
+        void fetch(`${API_URL}/admin/emergency-alerts/assignees`, {
+          headers: { [authHeaderKey]: ["Bearer", token].join(" ") },
+        })
+          .then(async (response) => {
+            const result = await response.json();
+            if (!response.ok || !Array.isArray(result)) {
+              throw new Error(
+                result?.error || "Unable to load active SOS assignees.",
+              );
+            }
+            if (active) setEmergencyAssignees(result);
+          })
+          .catch((assigneeError) => {
+            if (!active) return;
+            console.error("Could not load SOS assignees:", assigneeError);
+            setEmergencyConversationError(
+              assigneeError?.message || "Unable to load active SOS assignees.",
+            );
+          });
+      }
+    }
+    const channel = supabaseClient
+      .channel(`support-sos-conversation-${alertId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "emergency_alert_messages",
+          filter: `alert_id=eq.${alertId}`,
+        },
+        () => void loadConversation(false),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "emergency_alerts",
+          filter: `id=eq.${alertId}`,
+        },
+        () => void loadConversation(false),
+      )
+      .subscribe((status, subscriptionError) => {
+        if (subscriptionError) {
+          console.warn("SOS conversation realtime issue:", subscriptionError);
+        }
+        if (status === "SUBSCRIBED") void loadConversation(false);
+      });
+    const interval = setInterval(() => void loadConversation(false), 30_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      void supabaseClient.removeChannel(channel);
+    };
+  }, [
+    isSuperAdmin,
+    selectedEmergencyAlert?.id,
+    emergencyAlertDisclosure.isOpen,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== 3) return undefined;
+    let refreshTimer;
+    const scheduleSOSRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        void refresh({ background: true });
+      }, 200);
+    };
+    const channel = supabaseClient
+      .channel("support-sos-live")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "emergency_alerts",
+        },
+        scheduleSOSRefresh,
+      )
+      .subscribe((status, subscriptionError) => {
+        if (subscriptionError) {
+          console.warn(
+            "Support SOS realtime subscription issue:",
+            subscriptionError,
+          );
+        }
+        if (status === "SUBSCRIBED") scheduleSOSRefresh();
+      });
+    return () => {
+      clearTimeout(refreshTimer);
+      void supabaseClient.removeChannel(channel);
+    };
+  }, [
+    activeTab,
+    emergencyAlertDisclosure.isOpen,
+    refresh,
+    selectedEmergencyAlert?.id,
+  ]);
+
+  const sendEmergencyReply = async () => {
+    const alertId = selectedEmergencyAlert?.id;
+    const body = emergencyReplyDraft.trim();
+    if (
+      !alertId ||
+      !body ||
+      emergencyReplySending ||
+      !currentUserId ||
+      selectedEmergencyAlert?.attending_by !== currentUserId ||
+      selectedEmergencyAlert?.status === "resolved"
+    ) {
+      return;
+    }
+    setEmergencyReplySending(true);
+    setEmergencyConversationError("");
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error(
+          "Your support session has expired. Please sign in again.",
+        );
+      }
+      const response = await fetch(
+        `${API_URL}/admin/emergency-alerts/${alertId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            [authHeaderKey]: ["Bearer", token].join(" "),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ body }),
+        },
+      );
+      const result = await response.json();
+      const [sentMessage] = normalizeEmergencyConversationMessages([result]);
+      if (!response.ok || !sentMessage) {
+        throw new Error(result?.error || "Unable to send the SOS response.");
+      }
+      const updatedMessages = normalizeEmergencyConversationMessages([
+        ...emergencyConversationMessages,
+        sentMessage,
+      ]);
+      setEmergencyConversationMessages(updatedMessages);
+      writeEmergencyConversationCache(alertId, updatedMessages);
+      setEmergencyReplyDraft("");
+      setSelectedEmergencyAlert((current) =>
+        current?.id === alertId
+          ? {
+              ...current,
+              status: "in_progress",
+              attending_at: current.attending_at || sentMessage.created_at,
+              attending_by: current.attending_by || sentMessage.author_user_id,
+            }
+          : current,
+      );
+      setEmergencyAlerts((current) =>
+        current.map((alert) =>
+          alert.id === alertId
+            ? {
+                ...alert,
+                status: "in_progress",
+                attending_at: alert.attending_at || sentMessage.created_at,
+                attending_by: alert.attending_by || sentMessage.author_user_id,
+              }
+            : alert,
+        ),
+      );
+    } catch (sendError) {
+      setEmergencyConversationError(
+        sendError?.message || "Unable to send the SOS response.",
+      );
+    } finally {
+      setEmergencyReplySending(false);
+    }
+  };
+
+  const updateEmergencyStatus = async (status, attendingBy) => {
+    const alertId = selectedEmergencyAlert?.id;
+    if (!alertId || emergencyStatusUpdating) return;
+    setEmergencyStatusUpdating(true);
+    setEmergencyConversationError("");
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error(
+          "Your support session has expired. Please sign in again.",
+        );
+      }
+      const response = await fetch(
+        `${API_URL}/admin/emergency-alerts/${alertId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            [authHeaderKey]: ["Bearer", token].join(" "),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...(status ? { status } : {}),
+            ...(attendingBy !== undefined ? { attending_by: attendingBy } : {}),
+          }),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok || !result?.id) {
+        throw new Error(result?.error || "Unable to update the SOS status.");
+      }
+      setSelectedEmergencyAlert((current) =>
+        current?.id === alertId ? { ...current, ...result } : current,
+      );
+      setEmergencyAlerts((current) =>
+        current.map((alert) =>
+          alert.id === alertId ? { ...alert, ...result } : alert,
+        ),
+      );
+    } catch (statusError) {
+      setEmergencyConversationError(
+        statusError?.message || "Unable to update the SOS status.",
+      );
+    } finally {
+      setEmergencyStatusUpdating(false);
+    }
+  };
+
+  useEffect(() => {
+    const entityType = searchParams.get("openType");
+    const entityId = searchParams.get("openId");
+    if (!entityType || !entityId) return;
+
+    const notificationKey = `${entityType}:${entityId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+
+    if (entityType === "support_ticket") {
+      const ticket = tickets.find((item) => item.id === entityId);
+      if (!ticket) return;
+      handledNotificationRef.current = notificationKey;
+      setActiveTab(0);
+      void openTicketRef.current(ticket);
+    } else if (entityType === "incident_report") {
+      const incident = incidents.find((item) => item.id === entityId);
+      if (!incident) return;
+      handledNotificationRef.current = notificationKey;
+      setActiveTab(1);
+      void openIncidentRef.current(incident);
+    } else if (entityType === "emergency_alert") {
+      const alert = emergencyAlerts.find((item) => item.id === entityId);
+      if (!alert) return;
+      handledNotificationRef.current = notificationKey;
+      setActiveTab(3);
+      setSelectedEmergencyAlert(alert);
+      setEmergencyConversationMessages(
+        readEmergencyConversationCache(entityId) || [],
+      );
+      setEmergencyConversationLoading(!readEmergencyConversationCache(entityId));
+      setEmergencyConversationError("");
+      emergencyAlertDisclosure.onOpen();
+      void (async () => {
+        try {
+          const token = localStorage.getItem("token");
+          if (!token) {
+            throw new Error(
+              "Your support session has expired. Please sign in again.",
+            );
+          }
+          const response = await fetch(
+            `${API_URL}/admin/emergency-alerts/${entityId}/messages`,
+            {
+              headers: { [authHeaderKey]: ["Bearer", token].join(" ") },
+            },
+          );
+          const result = await response.json();
+          if (!response.ok || !Array.isArray(result?.messages)) {
+            throw new Error(
+              result?.error || "Unable to load the SOS conversation.",
+            );
+          }
+          const messages = normalizeEmergencyConversationMessages(result.messages);
+          setEmergencyConversationMessages(messages);
+          writeEmergencyConversationCache(entityId, messages);
+          setSelectedEmergencyAlert((current) =>
+            current?.id === entityId ? { ...current, ...result.alert } : current,
+          );
+          setEmergencyAlerts((current) =>
+            current.map((item) =>
+              item.id === entityId ? { ...item, ...result.alert } : item,
+            ),
+          );
+        } catch (requestError) {
+          console.error("Could not open SOS alert from notification:", requestError);
+          setEmergencyConversationError(
+            requestError?.message || "Unable to load the SOS conversation.",
+          );
+        } finally {
+          setEmergencyConversationLoading(false);
+        }
+      })();
+    } else {
+      return;
+    }
+
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("openType");
+        next.delete("openId");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [
+    searchParams,
+    setSearchParams,
+    tickets,
+    incidents,
+    emergencyAlerts,
+    emergencyAlertDisclosure,
+  ]);
 
   const reviewSchool = async (schoolId, decision) => {
     const actionKey = `school:${schoolId}`;
@@ -949,7 +1731,7 @@ const Requests = () => {
       new Date(second.created_at || 0).getTime() -
       new Date(first.created_at || 0).getTime(),
   );
-  const incidentPageSize = 6;
+  const incidentPageSize = 5;
   const incidentPageCount = Math.max(
     1,
     Math.ceil(sortedVisibleIncidents.length / incidentPageSize),
@@ -1078,6 +1860,84 @@ const Requests = () => {
     } catch (notificationError) {
       console.error("Could not mark support alert as read:", notificationError);
       setError(notificationError?.message || "Unable to update support alert.");
+    }
+  };
+
+  const supportAlertNotifications = notifications.filter((notification) =>
+    ["support_ticket", "incident_report", "emergency_alert"].includes(
+      notification.entity_type,
+    ),
+  );
+  const unreadSupportAlertCount = supportAlertNotifications.filter(
+    (notification) => !notification.read_at,
+  ).length;
+  const emergencyAlertPageSize = 6;
+  const emergencyAlertPageCount = Math.max(
+    1,
+    Math.ceil(emergencyAlerts.length / emergencyAlertPageSize),
+  );
+  const paginatedEmergencyAlerts = emergencyAlerts.slice(
+    (emergencyAlertPage - 1) * emergencyAlertPageSize,
+    emergencyAlertPage * emergencyAlertPageSize,
+  );
+
+  useEffect(() => {
+    setEmergencyAlertPage((page) =>
+      Math.min(page, emergencyAlertPageCount),
+    );
+  }, [emergencyAlertPageCount]);
+
+  const markAllSupportAlertsRead = async () => {
+    if (!unreadSupportAlertCount || markingAllSupportAlertsRead) return;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setError("Your support session has expired. Please sign in again.");
+      return;
+    }
+
+    setMarkingAllSupportAlertsRead(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/admin/support-notifications/read-all`,
+        {
+          method: "PATCH",
+          headers: { [authHeaderKey]: ["Bearer", token].join(" ") },
+        },
+      );
+      const result = await response.json();
+      if (!response.ok || !Array.isArray(result.notifications)) {
+        throw new Error(
+          result?.error || "Unable to mark all support alerts as read.",
+        );
+      }
+      const readAtById = new Map(
+        result.notifications.map((notification) => [
+          notification.id,
+          notification.read_at,
+        ]),
+      );
+      setNotifications((current) =>
+        current.map((notification) =>
+          readAtById.has(notification.id)
+            ? {
+                ...notification,
+                read_at: readAtById.get(notification.id),
+              }
+            : notification,
+        ),
+      );
+    } catch (notificationError) {
+      console.error(
+        "Could not mark all support alerts as read:",
+        notificationError,
+      );
+      setError(
+        notificationError?.message ||
+          "Unable to mark all support alerts as read.",
+      );
+    } finally {
+      setMarkingAllSupportAlertsRead(false);
     }
   };
 
@@ -1424,6 +2284,8 @@ const Requests = () => {
       bg="white"
       overflow="hidden"
       boxShadow="sm"
+      SOS
+      conversation
     >
       <Flex
         justify="space-between"
@@ -1695,6 +2557,17 @@ const Requests = () => {
                 color="gray.700"
                 fontSize="sm"
               >
+                {school.submission_source === "client_child_entry" ? (
+                  <Text>
+                    Submitted by parent
+                    {school.submitted_by?.name
+                      ? `: ${school.submitted_by.name}`
+                      : ""}
+                    {school.submitted_by?.email
+                      ? ` · ${school.submitted_by.email}`
+                      : ""}
+                  </Text>
+                ) : null}
                 {school.emis_number ? (
                   <Text>EMIS: {school.emis_number}</Text>
                 ) : null}
@@ -1907,95 +2780,282 @@ const Requests = () => {
         </Box>
       ) : null}
 
-      <Flex justify="flex-end" mb={4}>
+      <Flex justify="flex-end" mb={4} gap={2}>
+        <Button
+          leftIcon={<Icon as={FiMessageCircle} />}
+          variant="outline"
+          colorScheme="green"
+          borderRadius="xl"
+          aria-label={
+            activeTab === 4
+              ? "Return to support requests"
+              : "Open one-to-one support chat"
+          }
+          onClick={toggleOneToOneChats}
+        >
+          {activeTab === 4 ? "Support requests" : "One-to-one chat"}
+          {activeTab !== 4 && liveChats.length ? (
+            <Badge ml={2} colorScheme="green" borderRadius="full" px={2}>
+              {liveChats.length}
+            </Badge>
+          ) : null}
+        </Button>
         <Menu isLazy>
           <MenuButton
             as={Button}
             leftIcon={<Icon as={FiBell} />}
-            variant="outline"
-            colorScheme="orange"
+            variant="solid"
+            colorScheme={unreadSupportAlertCount ? "orange" : "gray"}
+            borderRadius="xl"
+            boxShadow="sm"
+            _hover={{ transform: "translateY(-1px)", boxShadow: "md" }}
+            transition="all 0.2s"
           >
             Support alerts
-            {notifications.some((item) => !item.read_at) ? (
-              <Badge ml={2} colorScheme="red">
-                {notifications.filter((item) => !item.read_at).length}
+            {unreadSupportAlertCount ? (
+              <Badge
+                ml={2}
+                colorScheme="red"
+                borderRadius="full"
+                px={2}
+                variant="solid"
+              >
+                {unreadSupportAlertCount}
               </Badge>
             ) : null}
           </MenuButton>
           <MenuList
             maxH="min(70vh, 520px)"
-            overflowY="auto"
-            minW={{ base: "300px", md: "420px" }}
-            p={2}
+            minW={{ base: "320px", md: "440px" }}
+            p={0}
+            display="flex"
+            flexDirection="column"
+            border="1px solid"
+            borderColor="gray.200"
+            borderRadius="2xl"
+            boxShadow="2xl"
+            overflow="hidden"
           >
-            <Box px={3} py={2}>
-              <Text fontSize="sm" fontWeight="700">
-                Support alerts
-              </Text>
-              <Text fontSize="xs" color="gray.500">
-                Urgent requests, unassigned work, and SLA deadlines
-              </Text>
-            </Box>
-            <MenuDivider />
-            {notifications.length ? (
-              notifications.slice(0, 10).map((notification, index) => (
-                <React.Fragment key={notification.id}>
-                  {index > 0 ? <MenuDivider /> : null}
-                  <Box
-                    px={2}
-                    py={1}
-                    bg={notification.read_at ? "white" : "orange.50"}
-                    borderRadius="md"
+            <Flex
+              px={4}
+              py={4}
+              justify="space-between"
+              align="center"
+              gap={3}
+              bg="gray.50"
+              borderBottom="1px solid"
+              borderColor="gray.200"
+              flexShrink={0}
+            >
+              <HStack spacing={3} minW={0}>
+                <Flex
+                  align="center"
+                  justify="center"
+                  w={10}
+                  h={10}
+                  flexShrink={0}
+                  borderRadius="xl"
+                  bg="orange.100"
+                  color="orange.600"
+                >
+                  <Icon as={FiBell} boxSize={5} />
+                </Flex>
+                <Box minW={0}>
+                  <Text fontSize="sm" fontWeight="700" color="gray.800">
+                    Support alerts
+                  </Text>
+                  <Text fontSize="xs" color="gray.500">
+                    Tickets, incidents, and driver SOS alerts
+                  </Text>
+                </Box>
+              </HStack>
+              <Button
+                size="sm"
+                leftIcon={<Icon as={FiCheck} />}
+                variant="outline"
+                colorScheme="blue"
+                borderRadius="lg"
+                flexShrink={0}
+                onClick={() => void markAllSupportAlertsRead()}
+                isLoading={markingAllSupportAlertsRead}
+                isDisabled={
+                  !unreadSupportAlertCount || markingAllSupportAlertsRead
+                }
+              >
+                Mark all
+              </Button>
+            </Flex>
+            <Box p={2} bg="white" overflowY="auto" flex="1" minH={0}>
+              {supportAlertNotifications.length ? (
+                <VStack align="stretch" spacing={1}>
+                  {supportAlertNotifications
+                    .slice(0, 10)
+                    .map((notification) => {
+                      const isIncident =
+                        notification.entity_type === "incident_report";
+                      const isEmergencyAlert =
+                        notification.entity_type === "emergency_alert";
+                      return (
+                        <Box
+                          key={notification.id}
+                          p={1}
+                          borderRadius="xl"
+                          bg={notification.read_at ? "white" : "blue.50"}
+                          border="1px solid"
+                          borderColor={
+                            notification.read_at
+                              ? "gray.100"
+                              : isEmergencyAlert
+                                ? "red.200"
+                                : "blue.100"
+                          }
+                          transition="all 0.15s"
+                          _hover={{
+                            borderColor: notification.read_at
+                              ? "gray.200"
+                              : "blue.200",
+                            boxShadow: "sm",
+                          }}
+                        >
+                          <MenuItem
+                            onClick={() => openNotification(notification)}
+                            borderRadius="lg"
+                            alignItems="center"
+                            whiteSpace="normal"
+                            py={2}
+                            px={2}
+                            bg="transparent"
+                            _hover={{ bg: "transparent" }}
+                            _focus={{ bg: "transparent" }}
+                          >
+                            <HStack align="flex-start" spacing={3} w="100%">
+                              <Flex
+                                align="center"
+                                justify="center"
+                                w={9}
+                                h={9}
+                                flexShrink={0}
+                                borderRadius="lg"
+                                bg={
+                                  isEmergencyAlert
+                                    ? "red.100"
+                                    : isIncident
+                                      ? "purple.100"
+                                      : "blue.100"
+                                }
+                                color={
+                                  isEmergencyAlert
+                                    ? "red.600"
+                                    : isIncident
+                                      ? "purple.600"
+                                      : "blue.600"
+                                }
+                              >
+                                <Icon
+                                  as={
+                                    isIncident || isEmergencyAlert
+                                      ? FiAlertTriangle
+                                      : FiMessageCircle
+                                  }
+                                  boxSize={4}
+                                />
+                              </Flex>
+                              <Box flex="1" minW={0}>
+                                <Flex align="center" gap={2} mb={1}>
+                                  <Text
+                                    fontSize="sm"
+                                    fontWeight="700"
+                                    color="gray.800"
+                                    noOfLines={1}
+                                  >
+                                    {notification.title}
+                                  </Text>
+                                  {!notification.read_at ? (
+                                    <Box
+                                      w={2}
+                                      h={2}
+                                      flexShrink={0}
+                                      borderRadius="full"
+                                      bg="blue.500"
+                                      aria-label="Unread"
+                                    />
+                                  ) : null}
+                                </Flex>
+                                <Text
+                                  fontSize="sm"
+                                  color="gray.600"
+                                  noOfLines={2}
+                                >
+                                  {notification.message}
+                                </Text>
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                  {formatDateTime(notification.created_at)}
+                                </Text>
+                              </Box>
+                            </HStack>
+                          </MenuItem>
+                          {!notification.read_at ? (
+                            <Button
+                              size="xs"
+                              leftIcon={<Icon as={FiCheck} />}
+                              variant="ghost"
+                              colorScheme="blue"
+                              borderRadius="md"
+                              onClick={() =>
+                                void markNotificationRead(notification)
+                              }
+                              ml={12}
+                              mb={1}
+                            >
+                              Mark read
+                            </Button>
+                          ) : null}
+                        </Box>
+                      );
+                    })}
+                </VStack>
+              ) : (
+                <Flex
+                  direction="column"
+                  align="center"
+                  textAlign="center"
+                  py={8}
+                >
+                  <Flex
+                    align="center"
+                    justify="center"
+                    w={12}
+                    h={12}
+                    mb={3}
+                    borderRadius="full"
+                    bg="green.50"
+                    color="green.600"
                   >
-                    <MenuItem
-                      onClick={() => openNotification(notification)}
-                      borderRadius="md"
-                      alignItems="flex-start"
-                      whiteSpace="normal"
-                    >
-                      <Box>
-                        <Text fontSize="sm" fontWeight="700">
-                          {notification.title}
-                        </Text>
-                        <Text fontSize="sm" color="gray.600" noOfLines={2}>
-                          {notification.message}
-                        </Text>
-                        <Text fontSize="xs" color="gray.500">
-                          {formatDateTime(notification.created_at)}
-                        </Text>
-                      </Box>
-                    </MenuItem>
-                    {!notification.read_at ? (
-                      <Button
-                        size="xs"
-                        leftIcon={<Icon as={FiCheck} />}
-                        variant="ghost"
-                        onClick={() => void markNotificationRead(notification)}
-                        mt={1}
-                      >
-                        Mark read
-                      </Button>
-                    ) : null}
-                  </Box>
-                </React.Fragment>
-              ))
-            ) : (
-              <Text px={3} py={4} fontSize="sm" color="gray.500">
-                No current alerts.
-              </Text>
-            )}
+                    <Icon as={FiCheck} boxSize={6} />
+                  </Flex>
+                  <Text fontSize="sm" fontWeight="600" color="gray.700">
+                    You’re all caught up
+                  </Text>
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    No ticket or incident alerts right now.
+                  </Text>
+                </Flex>
+              )}
+            </Box>
           </MenuList>
         </Menu>
       </Flex>
 
-      <Input
-        placeholder="Search tickets, incidents, or schools..."
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        bg="white"
-        mb={5}
-        maxW="560px"
-      />
+      {activeTab !== 4 ? (
+        <Input
+          placeholder="Search tickets, incidents, or schools..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          bg="white"
+          mb={5}
+          maxW="560px"
+        />
+      ) : null}
 
       {loading ? (
         <Flex justify="center" py={16}>
@@ -2008,20 +3068,28 @@ const Requests = () => {
           index={activeTab}
           onChange={handleTabChange}
         >
-          <TabList overflowX="auto">
-            <Tab>
-              Tickets <Badge ml={2}>{tickets.length}</Badge>
-            </Tab>
-            <Tab>
-              Incidents <Badge ml={2}>{incidents.length}</Badge>
-            </Tab>
-            <Tab>
-              Schools awaiting approval{" "}
-              <Badge ml={2} colorScheme="orange">
-                {schools.length}
-              </Badge>
-            </Tab>
-          </TabList>
+          {activeTab !== 4 ? (
+            <TabList overflowX="auto">
+              <Tab>
+                Tickets <Badge ml={2}>{tickets.length}</Badge>
+              </Tab>
+              <Tab>
+                Incidents <Badge ml={2}>{incidents.length}</Badge>
+              </Tab>
+              <Tab>
+                Schools awaiting approval{" "}
+                <Badge ml={2} colorScheme="orange">
+                  {schools.length}
+                </Badge>
+              </Tab>
+              <Tab>
+                Emergency SOS{" "}
+                <Badge ml={2} colorScheme="red">
+                  {emergencyAlerts.length}
+                </Badge>
+              </Tab>
+            </TabList>
+          ) : null}
           <TabPanels>
             <TabPanel px={0} pt={5}>
               <Flex justify="space-between" mb={4} gap={3} wrap="wrap">
@@ -2126,9 +3194,979 @@ const Requests = () => {
                 "There are no schools awaiting approval.",
               )}
             </TabPanel>
+            <TabPanel px={0} pt={5}>
+              <Flex justify="space-between" align="center" mb={4} gap={3}>
+                <Box>
+                  <Heading size="sm" color="gray.800">
+                    Emergency SOS alerts
+                  </Heading>
+                  <Text color="gray.600" fontSize="sm" mt={1}>
+                    Sender alerts with reported location and support-response
+                    status.
+                  </Text>
+                </Box>
+                <Button
+                  size="sm"
+                  leftIcon={<Icon as={FiRefreshCw} />}
+                  onClick={() => void refresh({ background: false })}
+                  isLoading={refreshing}
+                >
+                  Refresh
+                </Button>
+              </Flex>
+              {emergencyAlertsError ? (
+                <Alert status="error" mb={4} borderRadius="lg">
+                  <AlertIcon />
+                  <AlertDescription>{emergencyAlertsError}</AlertDescription>
+                </Alert>
+              ) : null}
+              {emergencyAlerts.length ? (
+                <Box
+                  bg="white"
+                  borderWidth="1px"
+                  borderColor="gray.200"
+                  borderRadius="xl"
+                  overflow="hidden"
+                  boxShadow="sm"
+                >
+                  <Flex
+                    align="center"
+                    justify="space-between"
+                    gap={3}
+                    px={4}
+                    py={3}
+                    bg="gray.50"
+                    borderBottomWidth="1px"
+                    borderColor="gray.200"
+                  >
+                    <Box>
+                      <Text fontWeight="700" color="gray.800">
+                        Active SOS queue
+                      </Text>
+                      <Text fontSize="xs" color="gray.500" mt={0.5}>
+                        Opening an unassigned alert assigns it to you. Only the
+                        assigned support member can reply.
+                      </Text>
+                    </Box>
+                    <Badge colorScheme="red" borderRadius="full" px={3} py={1}>
+                      {emergencyAlerts.length}{" "}
+                      {emergencyAlerts.length === 1 ? "alert" : "alerts"}
+                    </Badge>
+                  </Flex>
+                  <TableContainer>
+                    <Table size="sm" variant="simple">
+                      <Thead bg="white">
+                        <Tr>
+                          <Th>Sender</Th>
+                          <Th minW="250px">Emergency</Th>
+                          <Th>Status</Th>
+                          <Th>Assigned support</Th>
+                          <Th>Received</Th>
+                          <Th textAlign="right">Action</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {paginatedEmergencyAlerts.map((alert) => {
+                          const appearance = emergencyStatusAppearance(alert);
+                          const assigneeName = emergencyAssigneeName(alert);
+                          const isAssignedToCurrentUser =
+                            Boolean(
+                              currentUserId &&
+                                alert.attending_by === currentUserId,
+                            );
+                          const coordinates = getAlertCoordinates(alert);
+                          return (
+                            <Tr
+                              key={alert.id}
+                              _hover={{ bg: "gray.50" }}
+                              borderLeftWidth="3px"
+                              borderLeftColor={`${appearance.scheme}.400`}
+                            >
+                              <Td minW="175px">
+                                <Text fontWeight="700" color="gray.800">
+                                  {alert.users?.name || "Unknown sender"}
+                                </Text>
+                                <Text fontSize="xs" color="gray.500" mt={0.5}>
+                                  {emergencySenderLabel(alert.users?.role)}
+                                  {alert.users?.phone
+                                    ? ` · ${alert.users.phone}`
+                                    : ""}
+                                </Text>
+                              </Td>
+                              <Td maxW="360px">
+                                <Text
+                                  color="gray.700"
+                                  noOfLines={2}
+                                  title={
+                                    alert.message ||
+                                    "Emergency assistance requested"
+                                  }
+                                >
+                                  {alert.message ||
+                                    "Emergency assistance requested"}
+                                </Text>
+                                <Text fontSize="xs" color="gray.500" mt={1}>
+                                  {alert.route?.route_name ||
+                                    "Route unavailable"}
+                                  {coordinates
+                                    ? ` · ${coordinates[0].toFixed(5)}, ${coordinates[1].toFixed(5)}`
+                                    : ""}
+                                </Text>
+                              </Td>
+                              <Td minW="155px">
+                                <Badge
+                                  colorScheme={appearance.scheme}
+                                  borderRadius="full"
+                                  px={2.5}
+                                  py={1}
+                                >
+                                  {appearance.label}
+                                </Badge>
+                              </Td>
+                              <Td minW="175px">
+                                <Text
+                                  fontSize="sm"
+                                  fontWeight={alert.attending_by ? "600" : "400"}
+                                  color={alert.attending_by ? "gray.700" : "gray.400"}
+                                >
+                                  {assigneeName ||
+                                    (alert.attending_by
+                                      ? "Assigned support"
+                                      : "Unassigned")}
+                                </Text>
+                                {isAssignedToCurrentUser ? (
+                                  <Badge
+                                    mt={1}
+                                    colorScheme="green"
+                                    variant="subtle"
+                                  >
+                                    Assigned to you
+                                  </Badge>
+                                ) : null}
+                              </Td>
+                              <Td minW="160px">
+                                <Text fontSize="sm" color="gray.600">
+                                  {formatDateTime(alert.created_at)}
+                                </Text>
+                              </Td>
+                              <Td textAlign="right" minW="155px">
+                                <Button
+                                  size="sm"
+                                  colorScheme={
+                                    isAssignedToCurrentUser ? "blue" : "gray"
+                                  }
+                                  variant={
+                                    isAssignedToCurrentUser ? "solid" : "outline"
+                                  }
+                                  leftIcon={<Icon as={FiMessageCircle} />}
+                                  onClick={() => {
+                                    setSelectedEmergencyAlert(alert);
+                                    const cachedMessages =
+                                      readEmergencyConversationCache(alert.id);
+                                    setEmergencyConversationMessages(
+                                      cachedMessages || [],
+                                    );
+                                    setEmergencyConversationLoading(
+                                      !cachedMessages,
+                                    );
+                                    setEmergencyConversationError("");
+                                    emergencyAlertDisclosure.onOpen();
+                                  }}
+                                >
+                                  {isAssignedToCurrentUser
+                                    ? alert.status === "resolved"
+                                      ? "View"
+                                      : "Respond"
+                                    : alert.attending_by ||
+                                        alert.status === "resolved"
+                                      ? "View"
+                                      : "Claim"}
+                                </Button>
+                              </Td>
+                            </Tr>
+                          );
+                        })}
+                      </Tbody>
+                    </Table>
+                  </TableContainer>
+                  <Flex
+                    align="center"
+                    justify="space-between"
+                    gap={3}
+                    px={4}
+                    py={3}
+                    borderTopWidth="1px"
+                    borderColor="gray.100"
+                    wrap="wrap"
+                  >
+                    <Text fontSize="sm" color="gray.500">
+                      Showing{" "}
+                      {emergencyAlerts.length
+                        ? (emergencyAlertPage - 1) * emergencyAlertPageSize + 1
+                        : 0}
+                      –
+                      {Math.min(
+                        emergencyAlertPage * emergencyAlertPageSize,
+                        emergencyAlerts.length,
+                      )}{" "}
+                      of {emergencyAlerts.length} alerts
+                    </Text>
+                    <HStack spacing={2}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<Icon as={FiChevronLeft} />}
+                        onClick={() =>
+                          setEmergencyAlertPage((page) => Math.max(1, page - 1))
+                        }
+                        isDisabled={emergencyAlertPage <= 1}
+                      >
+                        Previous
+                      </Button>
+                      <Text fontSize="sm" color="gray.600">
+                        Page {emergencyAlertPage} of {emergencyAlertPageCount}
+                      </Text>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        rightIcon={<Icon as={FiChevronRight} />}
+                        onClick={() =>
+                          setEmergencyAlertPage((page) =>
+                            Math.min(emergencyAlertPageCount, page + 1),
+                          )
+                        }
+                        isDisabled={emergencyAlertPage >= emergencyAlertPageCount}
+                      >
+                        Next
+                      </Button>
+                    </HStack>
+                  </Flex>
+                </Box>
+              ) : !emergencyAlertsError ? (
+                <Flex
+                  direction="column"
+                  align="center"
+                  textAlign="center"
+                  py={12}
+                  color="gray.500"
+                  bg="white"
+                  borderWidth="1px"
+                  borderColor="gray.200"
+                  borderRadius="xl"
+                >
+                  <Icon as={FiCheck} boxSize={7} mb={2} color="green.500" />
+                  <Text fontSize="sm" fontWeight="600">
+                    No emergency SOS alerts
+                  </Text>
+                  <Text fontSize="xs" mt={1}>
+                    New driver alerts will appear here.
+                  </Text>
+                </Flex>
+              ) : null}
+            </TabPanel>
+            <TabPanel px={0} pt={5}>
+              <Flex justify="space-between" align="center" mb={4} gap={3}>
+                <Text color="gray.600" fontSize="sm">
+                  Private support chats requested from the mobile app.
+                </Text>
+                <Button
+                  size="sm"
+                  leftIcon={<Icon as={FiRefreshCw} />}
+                  onClick={() => void refreshLiveChats()}
+                  isLoading={liveChatsLoading}
+                >
+                  Refresh
+                </Button>
+              </Flex>
+              {liveChatError ? (
+                <Alert status="error" mb={4} borderRadius="md">
+                  <AlertIcon />
+                  <AlertDescription>{liveChatError}</AlertDescription>
+                </Alert>
+              ) : null}
+              <Flex
+                align="stretch"
+                gap={4}
+                direction={{ base: "column", lg: "row" }}
+              >
+                <Box
+                  bg="white"
+                  borderWidth="1px"
+                  borderColor="gray.200"
+                  borderRadius="xl"
+                  overflow="hidden"
+                  w={{ base: "100%", lg: "320px" }}
+                  flexShrink={0}
+                >
+                  <Flex
+                    align="center"
+                    justify="space-between"
+                    px={4}
+                    py={3}
+                    borderBottomWidth="1px"
+                    borderColor="gray.100"
+                  >
+                    <Text fontWeight="700" color="gray.800">
+                      Chat requests
+                    </Text>
+                    <Badge colorScheme="green" borderRadius="full" px={2}>
+                      {liveChats.length}
+                    </Badge>
+                  </Flex>
+                  {liveChats.length ? (
+                    <VStack
+                      align="stretch"
+                      spacing={0}
+                      maxH={{ base: "240px", lg: "560px" }}
+                      overflowY="auto"
+                    >
+                      {liveChats.map((chat) => {
+                        const requester =
+                          chat.users?.name || chat.users?.email || "App user";
+                        return (
+                          <Button
+                            key={chat.id}
+                            variant="ghost"
+                            borderRadius={0}
+                            justifyContent="flex-start"
+                            h="auto"
+                            whiteSpace="normal"
+                            textAlign="left"
+                            px={4}
+                            py={3}
+                            bg={
+                              selectedLiveChat?.id === chat.id
+                                ? "green.50"
+                                : "white"
+                            }
+                            borderBottomWidth="1px"
+                            borderColor="gray.100"
+                            onClick={() => {
+                              setLiveChatMessages([]);
+                              setSelectedLiveChat(chat);
+                              setLiveChatError("");
+                            }}
+                          >
+                            <Box minW={0}>
+                              <Text
+                                fontSize="sm"
+                                fontWeight="700"
+                                noOfLines={1}
+                              >
+                                {requester}
+                              </Text>
+                              <Text
+                                color="gray.500"
+                                fontSize="xs"
+                                mt={1}
+                                textTransform="capitalize"
+                              >
+                                {prettyLabel(chat.status)} ·{" "}
+                                {formatDateTime(
+                                  chat.last_message_at || chat.created_at,
+                                )}
+                              </Text>
+                            </Box>
+                          </Button>
+                        );
+                      })}
+                    </VStack>
+                  ) : (
+                    <Text color="gray.500" fontSize="sm" px={4} py={6}>
+                      No one-to-one chat requests yet.
+                    </Text>
+                  )}
+                </Box>
+                <Flex
+                  direction="column"
+                  flex={1}
+                  minH={{ base: "420px", lg: "560px" }}
+                  bg="white"
+                  borderWidth="1px"
+                  borderColor="gray.200"
+                  borderRadius="xl"
+                  overflow="hidden"
+                >
+                  {selectedLiveChat ? (
+                    <>
+                      <Flex
+                        align="center"
+                        justify="space-between"
+                        px={4}
+                        py={3}
+                        borderBottomWidth="1px"
+                        borderColor="gray.100"
+                      >
+                        <Box>
+                          <Text fontWeight="700" color="gray.800">
+                            {selectedLiveChat.users?.name ||
+                              selectedLiveChat.users?.email ||
+                              "App user"}
+                          </Text>
+                          <Text fontSize="xs" color="gray.500">
+                            One-to-one support conversation
+                          </Text>
+                        </Box>
+                        <Badge
+                          colorScheme={statusColor(selectedLiveChat.status)}
+                        >
+                          {prettyLabel(selectedLiveChat.status)}
+                        </Badge>
+                      </Flex>
+                      <VStack
+                        align="stretch"
+                        spacing={3}
+                        flex={1}
+                        overflowY="auto"
+                        p={4}
+                        bg="gray.50"
+                      >
+                        {liveChatMessages.length ? (
+                          liveChatMessages.map((message) => {
+                            const isSupport = message.sender_role === "support";
+                            return (
+                              <Flex
+                                key={message.id}
+                                justify={isSupport ? "flex-end" : "flex-start"}
+                              >
+                                <Box
+                                  maxW="80%"
+                                  px={3}
+                                  py={2}
+                                  borderRadius="lg"
+                                  bg={isSupport ? "green.600" : "white"}
+                                  color={isSupport ? "white" : "gray.800"}
+                                  boxShadow="sm"
+                                >
+                                  <Text fontSize="sm" whiteSpace="pre-wrap">
+                                    {message.message}
+                                  </Text>
+                                  <Text
+                                    fontSize="xs"
+                                    mt={1}
+                                    opacity={0.75}
+                                    textAlign="right"
+                                  >
+                                    {formatDateTime(message.created_at)}
+                                  </Text>
+                                </Box>
+                              </Flex>
+                            );
+                          })
+                        ) : (
+                          <Text
+                            color="gray.500"
+                            fontSize="sm"
+                            textAlign="center"
+                            py={8}
+                          >
+                            No messages yet. Send a message to start the
+                            conversation.
+                          </Text>
+                        )}
+                      </VStack>
+                      <HStack
+                        align="flex-end"
+                        p={3}
+                        borderTopWidth="1px"
+                        borderColor="gray.100"
+                        spacing={2}
+                      >
+                        <Textarea
+                          value={liveChatDraft}
+                          onChange={(event) =>
+                            setLiveChatDraft(event.target.value)
+                          }
+                          placeholder="Write a reply..."
+                          resize="none"
+                          rows={2}
+                          maxLength={10000}
+                          onKeyDown={(event) => {
+                            if (
+                              event.key === "Enter" &&
+                              !event.shiftKey &&
+                              !event.nativeEvent?.isComposing
+                            ) {
+                              event.preventDefault();
+                              void sendLiveChatReply();
+                            }
+                          }}
+                        />
+                        <Button
+                          colorScheme="green"
+                          leftIcon={<Icon as={FiMessageCircle} />}
+                          onClick={() => void sendLiveChatReply()}
+                          isLoading={liveChatSending}
+                          isDisabled={!liveChatDraft.trim()}
+                        >
+                          Send
+                        </Button>
+                      </HStack>
+                    </>
+                  ) : (
+                    <Flex
+                      flex={1}
+                      align="center"
+                      justify="center"
+                      direction="column"
+                      color="gray.500"
+                      gap={2}
+                      p={6}
+                    >
+                      <Icon as={FiMessageCircle} boxSize={8} />
+                      <Text fontSize="sm">
+                        Select a chat request to view the conversation.
+                      </Text>
+                    </Flex>
+                  )}
+                </Flex>
+              </Flex>
+            </TabPanel>
           </TabPanels>
         </Tabs>
       )}
+
+      <Modal
+        isOpen={emergencyAlertDisclosure.isOpen}
+        onClose={emergencyAlertDisclosure.onClose}
+        size="full"
+        scrollBehavior="inside"
+      >
+        <ModalOverlay bg="gray.900Alpha.700" />
+        <ModalContent
+          maxW="100vw"
+          h="100dvh"
+          maxH="100dvh"
+          m={0}
+          borderRadius={0}
+          overflow="hidden"
+          display="flex"
+          flexDirection="column"
+        >
+          <ModalHeader
+            bg="white"
+            color="gray.800"
+            borderBottomWidth="1px"
+            borderColor="gray.200"
+            pr={12}
+            py={4}
+          >
+            <HStack spacing={3} align="center">
+              <Flex
+                align="center"
+                justify="center"
+                w={11}
+                h={11}
+                flexShrink={0}
+                borderRadius="xl"
+                bg="red.50"
+                color="red.600"
+              >
+                <Icon as={FiAlertTriangle} boxSize={5} />
+              </Flex>
+              <Box minW={0}>
+                <Text
+                  fontSize="xs"
+                  fontWeight="800"
+                  letterSpacing="1.2px"
+                  color="red.600"
+                  textTransform="uppercase"
+                >
+                  Emergency response
+                </Text>
+                <Text
+                  fontSize={{ base: "md", md: "lg" }}
+                  fontWeight="700"
+                  noOfLines={1}
+                >
+                  {selectedEmergencyAlert?.title ||
+                    `${emergencySenderLabel(selectedEmergencyAlert?.users?.role)} emergency SOS`}
+                </Text>
+              </Box>
+              <Badge
+                ml="auto"
+                colorScheme={statusColor(selectedEmergencyAlert?.status)}
+                borderRadius="full"
+                px={3}
+                py={1}
+                flexShrink={0}
+              >
+                {prettyLabel(selectedEmergencyAlert?.status || "open")}
+              </Badge>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody
+            p={{ base: 3, md: 6 }}
+            bg="gray.50"
+            flex="1"
+            minH={0}
+            overflowY="auto"
+          >
+            <SimpleGrid
+              maxW="1600px"
+              mx="auto"
+              alignItems="start"
+              spacing={{ base: 4, xl: 6 }}
+              templateColumns={{
+                base: "minmax(0, 1fr)",
+                lg: "minmax(0, 1.15fr) minmax(360px, 0.85fr)",
+              }}
+            >
+              <VStack
+                align="stretch"
+                spacing={4}
+                p={{ base: 3, md: 5 }}
+                bg="white"
+                borderWidth="1px"
+                borderColor="gray.200"
+                borderRadius="2xl"
+                boxShadow="sm"
+              >
+                <HStack justify="space-between" align="flex-start">
+                  <Box>
+                    <Text fontWeight="700" color="gray.800">
+                      {selectedEmergencyAlert?.users?.name ||
+                        "Sender details unavailable"}
+                    </Text>
+                    <Text fontSize="sm" color="gray.500">
+                      {emergencySenderLabel(selectedEmergencyAlert?.users?.role)}
+                    </Text>
+                    <Text fontSize="sm" color="gray.500">
+                      {selectedEmergencyAlert?.users?.phone ||
+                        selectedEmergencyAlert?.users?.email ||
+                        "No sender contact details"}
+                    </Text>
+                  </Box>
+                </HStack>
+              <HStack
+                justify="space-between"
+                align={{ base: "stretch", sm: "center" }}
+                flexDirection={{ base: "column", sm: "row" }}
+                p={3}
+                borderRadius="lg"
+                borderWidth="1px"
+                borderColor={`${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.200`}
+                bg={
+                  emergencyStatusAppearance(selectedEmergencyAlert).background
+                }
+              >
+                <Box>
+                  <Text fontSize="sm" fontWeight="700" color="gray.800">
+                    SOS status
+                  </Text>
+                  <Text fontSize="xs" color="gray.600">
+                    {!isSuperAdmin
+                      ? "Only super-admins can change status or assignment."
+                      : emergencyAssigneeName(selectedEmergencyAlert)
+                        ? `Assigned to: ${emergencyAssigneeName(selectedEmergencyAlert)}`
+                        : selectedEmergencyAlert?.attending_by
+                          ? "Assigned support member"
+                          : "Unassigned — opening this alert claims it"}
+                  </Text>
+                </Box>
+                {isSuperAdmin ? (
+                  <VStack
+                    align="stretch"
+                    spacing={2}
+                    minW={{ base: "100%", sm: "230px" }}
+                  >
+                    <Select
+                      size="sm"
+                      value={selectedEmergencyAlert?.status || "open"}
+                      onChange={(event) =>
+                        void updateEmergencyStatus(event.target.value)
+                      }
+                      isDisabled={emergencyStatusUpdating}
+                      aria-label="Update SOS status"
+                      bg="white"
+                    >
+                      <option
+                        value="open"
+                        disabled={selectedEmergencyAlert?.status !== "open"}
+                      >
+                        Waiting for support
+                      </option>
+                      <option value="in_progress">Support is attending</option>
+                      <option value="resolved">Resolved</option>
+                    </Select>
+                    <Select
+                      size="sm"
+                      value={selectedEmergencyAlert?.attending_by || ""}
+                      onChange={(event) =>
+                        void updateEmergencyStatus(
+                          undefined,
+                          event.target.value || null,
+                        )
+                      }
+                      isDisabled={emergencyStatusUpdating}
+                      aria-label="Assign SOS to support"
+                      bg="white"
+                    >
+                      <option
+                        value=""
+                        disabled={selectedEmergencyAlert?.status !== "open"}
+                      >
+                        Unassigned / waiting
+                      </option>
+                      {emergencyAssignees.map((assignee) => (
+                        <option key={assignee.id} value={assignee.id}>
+                          {assignee.name} · {prettyLabel(assignee.role)}
+                        </option>
+                      ))}
+                    </Select>
+                  </VStack>
+                ) : null}
+              </HStack>
+              {selectedEmergencyAlert?.route?.route_name ? (
+                <Text fontSize="sm" color="gray.600">
+                  Route: {selectedEmergencyAlert.route.route_name}
+                </Text>
+              ) : null}
+              {selectedEmergencyAlert?.children ? (
+                <Text fontSize="sm" color="gray.600">
+                  Child:{" "}
+                  {[
+                    selectedEmergencyAlert.children.name,
+                    selectedEmergencyAlert.children.lastname,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || "Name unavailable"}
+                </Text>
+              ) : null}
+              <Text color="gray.800" whiteSpace="pre-wrap">
+                {selectedEmergencyAlert?.message ||
+                  "No additional emergency details were provided."}
+              </Text>
+              <Text fontSize="sm" color="gray.500">
+                Received {formatDateTime(selectedEmergencyAlert?.created_at)}
+              </Text>
+              {getAlertCoordinates(selectedEmergencyAlert) ? (
+                <>
+                  <Text fontSize="sm" fontWeight="600" color="gray.700">
+                    Coordinates:{" "}
+                    {getAlertCoordinates(selectedEmergencyAlert).join(", ")}
+                  </Text>
+                  <Box
+                    h={{ base: "280px", md: "min(42vh, 520px)" }}
+                    overflow="hidden"
+                    borderRadius="xl"
+                    borderWidth="1px"
+                    borderColor="gray.200"
+                  >
+                    <MapContainer
+                      center={getAlertCoordinates(selectedEmergencyAlert)}
+                      zoom={15}
+                      style={{ width: "100%", height: "100%" }}
+                      scrollWheelZoom
+                    >
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <Marker
+                        position={getAlertCoordinates(selectedEmergencyAlert)}
+                        icon={emergencyAlertIcon}
+                      >
+                        <Popup>
+                          <strong>
+                            {selectedEmergencyAlert?.users?.name ||
+                              `${emergencySenderLabel(selectedEmergencyAlert?.users?.role)} SOS`}
+                          </strong>
+                          <br />
+                          {formatDateTime(selectedEmergencyAlert?.created_at)}
+                        </Popup>
+                      </Marker>
+                    </MapContainer>
+                  </Box>
+                </>
+              ) : (
+                <Alert status="warning" borderRadius="lg">
+                  <AlertIcon />
+                  <AlertDescription>
+                    No valid GPS coordinates were attached to this alert.
+                    {selectedEmergencyAlert?.location
+                      ? ` Location: ${selectedEmergencyAlert.location}`
+                      : ""}
+                  </AlertDescription>
+                </Alert>
+              )}
+              </VStack>
+              <VStack
+                align="stretch"
+                spacing={4}
+                p={{ base: 3, md: 5 }}
+                bg="white"
+                borderWidth="1px"
+                borderColor="gray.200"
+                borderRadius="2xl"
+                boxShadow="sm"
+              >
+                <Box>
+                  <Heading size="sm" color="gray.800" mb={1}>
+                    SOS conversation
+                  </Heading>
+                  <Text fontSize="sm" color="gray.500" mb={3}>
+                    Messages between support and the alert sender
+                  </Text>
+                  <Box
+                    maxH={{
+                      base: "min(42vh, 420px)",
+                      lg: "min(55vh, 620px)",
+                    }}
+                    minH="180px"
+                    overflowY="auto"
+                    p={{ base: 3, md: 4 }}
+                    bg="gray.50"
+                    borderWidth="1px"
+                    borderColor="gray.200"
+                    borderRadius="xl"
+                  >
+                  {emergencyConversationLoading ? (
+                    <Flex justify="center" py={5}>
+                      <Spinner size="sm" color="red.500" />
+                    </Flex>
+                  ) : emergencyConversationMessages.length ? (
+                    <VStack align="stretch" spacing={3}>
+                      {emergencyConversationMessages.map((item) => {
+                        const isOwn = item.author_user_id === currentUserId;
+                        return (
+                          <Flex
+                            key={item.id}
+                            justify={isOwn ? "flex-end" : "flex-start"}
+                          >
+                            <Box
+                              maxW="85%"
+                              px={3}
+                              py={2}
+                              borderRadius="xl"
+                              bg={isOwn ? "red.600" : "white"}
+                              color={isOwn ? "white" : "gray.800"}
+                              borderWidth="1px"
+                              borderColor={
+                                isOwn
+                                  ? `${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.600`
+                                  : `${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.200`
+                              }
+                            >
+                              <Text fontSize="xs" fontWeight="700" mb={1}>
+                                {isOwn
+                                  ? "Support"
+                                  : item.users?.name ||
+                                    emergencySenderLabel(item.users?.role)}
+                              </Text>
+                              <Text fontSize="sm" whiteSpace="pre-wrap">
+                                {item.body}
+                              </Text>
+                              <Text
+                                fontSize="xs"
+                                opacity={0.75}
+                                mt={1}
+                                textAlign="right"
+                              >
+                                {formatDateTime(item.created_at)}
+                              </Text>
+                            </Box>
+                          </Flex>
+                        );
+                      })}
+                    </VStack>
+                  ) : (
+                    <Text
+                      color="gray.500"
+                      fontSize="sm"
+                      textAlign="center"
+                      py={5}
+                    >
+                      Send a message to let the sender know support is
+                      attending.
+                    </Text>
+                  )}
+                  </Box>
+                  {emergencyConversationError ? (
+                    <Alert status="error" mt={3} borderRadius="lg">
+                      <AlertIcon />
+                      <AlertDescription>
+                        {emergencyConversationError}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  {selectedEmergencyAlert?.attending_by &&
+                  selectedEmergencyAlert.attending_by !== currentUserId ? (
+                    <Alert status="info" mt={3} borderRadius="lg">
+                      <AlertIcon />
+                      <AlertDescription>
+                        This alert is assigned to{" "}
+                        {emergencyAssigneeName(selectedEmergencyAlert) ||
+                          "another support member"}
+                        . Only the assigned support member can respond.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <HStack align="flex-end" mt={3}>
+                    <Textarea
+                      value={emergencyReplyDraft}
+                      onChange={(event) =>
+                        setEmergencyReplyDraft(event.target.value)
+                      }
+                      placeholder="Message the SOS sender..."
+                      maxLength={3000}
+                      rows={2}
+                      resize="vertical"
+                      isDisabled={
+                        !currentUserId ||
+                        selectedEmergencyAlert?.attending_by !==
+                          currentUserId ||
+                        selectedEmergencyAlert?.status === "resolved" ||
+                        emergencyReplySending
+                      }
+                    />
+                    <Button
+                      colorScheme="red"
+                      onClick={() => void sendEmergencyReply()}
+                      isLoading={emergencyReplySending}
+                      isDisabled={
+                        !emergencyReplyDraft.trim() ||
+                        !currentUserId ||
+                        selectedEmergencyAlert?.attending_by !==
+                          currentUserId ||
+                        selectedEmergencyAlert?.status === "resolved"
+                      }
+                    >
+                      Send
+                    </Button>
+                  </HStack>
+                  {selectedEmergencyAlert?.attending_by === currentUserId &&
+                  currentUserId &&
+                  selectedEmergencyAlert?.attending_at ? (
+                    <Text fontSize="xs" color="green.600" mt={2}>
+                      You are attending this SOS.
+                    </Text>
+                  ) : !selectedEmergencyAlert?.attending_by &&
+                    selectedEmergencyAlert?.status !== "resolved" ? (
+                    <Text fontSize="xs" color="orange.600" mt={2}>
+                      Open an unassigned alert to claim it before responding.
+                    </Text>
+                  ) : null}
+                </Box>
+              </VStack>
+            </SimpleGrid>
+          </ModalBody>
+          <ModalFooter
+            bg="white"
+            borderTopWidth="1px"
+            borderColor="gray.200"
+            py={3}
+          >
+            <Button
+              colorScheme="red"
+              onClick={emergencyAlertDisclosure.onClose}
+            >
+              Close alert
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <Modal
         isOpen={ticketDisclosure.isOpen}
@@ -2626,6 +4664,16 @@ const Requests = () => {
                 <Text fontSize="sm" color="gray.500" mt={1}>
                   Submitted {formatDateTime(selectedSchool.created_at)}
                 </Text>
+                {selectedSchool.submission_source === "client_child_entry" ? (
+                  <Alert status="info" mt={4} borderRadius="md">
+                    <AlertIcon />
+                    <AlertDescription fontSize="sm">
+                      This school was added by a parent while registering a
+                      child. Approval will activate the school listing; it does
+                      not create or approve a school administrator account.
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mt={5}>
                   {[
                     ["EMIS number", selectedSchool.emis_number],
@@ -2652,8 +4700,21 @@ const Requests = () => {
                   ))}
                 </SimpleGrid>
                 <Heading size="sm" mt={5} mb={2}>
-                  Applicant details
+                  Submitter and school administrator details
                 </Heading>
+                {selectedSchool.submitted_by ? (
+                  <Box p={3} bg="gray.50" borderRadius="md" mb={2}>
+                    <Text fontWeight="600">
+                      {selectedSchool.submitted_by.name || "Parent"}
+                    </Text>
+                    <Text fontSize="sm">
+                      {selectedSchool.submitted_by.email || "No email recorded"}
+                    </Text>
+                    <Text fontSize="xs" color="gray.500">
+                      Parent who submitted the school
+                    </Text>
+                  </Box>
+                ) : null}
                 {(selectedSchool.school_admins || []).length ? (
                   <VStack align="stretch" spacing={2}>
                     {selectedSchool.school_admins.map((admin) => (
@@ -2682,7 +4743,7 @@ const Requests = () => {
                   </VStack>
                 ) : (
                   <Text fontSize="sm" color="gray.500">
-                    No applicant account is linked.
+                    No school administrator account is linked.
                   </Text>
                 )}
                 {safeExternalUrl(selectedSchool.logo) ? (

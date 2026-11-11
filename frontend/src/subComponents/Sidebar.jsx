@@ -31,6 +31,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import logo from "../Asserts/images/logo.png";
 import { supabaseClient } from "../supabaseClient/supabase.config";
+import { clearSupportSession } from "../utils/asyncStorage/authSession";
 
 const API_URL = (
     process.env.REACT_APP_API_URL ||
@@ -203,8 +204,7 @@ const SidebarContent = ({ onClose }) => {
         .toUpperCase();
 
     const handleLogout = () => {
-        localStorage.removeItem("user");
-        localStorage.removeItem("token");
+        clearSupportSession();
         navigate("/");
         onClose?.();
     };

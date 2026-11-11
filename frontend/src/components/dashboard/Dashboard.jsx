@@ -112,7 +112,10 @@ const getSupportName = () => {
       "Support team"
     );
   } catch (error) {
-    console.error("Could not read the support profile from local storage:", error);
+    console.error(
+      "Could not read the support profile from local storage:",
+      error,
+    );
     return "Support team";
   }
 };
@@ -150,7 +153,9 @@ const Dashboard = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        throw new Error("Your support session has expired. Please sign in again.");
+        throw new Error(
+          "Your support session has expired. Please sign in again.",
+        );
       }
       const response = await fetch(`${API_URL}/admin/dashboard`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -173,10 +178,7 @@ const Dashboard = () => {
       };
       setDashboardData(nextData);
       try {
-        localStorage.setItem(
-          getDashboardCacheKey(),
-          JSON.stringify(nextData),
-        );
+        localStorage.setItem(getDashboardCacheKey(), JSON.stringify(nextData));
       } catch (cacheError) {
         console.warn("Could not save the support dashboard cache:", cacheError);
       }
@@ -197,29 +199,30 @@ const Dashboard = () => {
     void refresh();
 
     let debounceTimer;
-    const channel = supabaseClient
-      .channel("support-dashboard-live")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "support_dashboard_events",
-        },
-        () => {
-          clearTimeout(debounceTimer);
-          debounceTimer = setTimeout(
-            () => void refresh({ background: true }),
-            400,
-          );
-        },
-      );
+    const channel = supabaseClient.channel("support-dashboard-live").on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "support_dashboard_events",
+      },
+      () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(
+          () => void refresh({ background: true }),
+          400,
+        );
+      },
+    );
 
     channel.subscribe((status, subscriptionError) => {
       const connected = status === "SUBSCRIBED";
       setRealtimeConnected(connected);
       if (subscriptionError) {
-        console.warn("Support dashboard realtime subscription issue:", subscriptionError);
+        console.warn(
+          "Support dashboard realtime subscription issue:",
+          subscriptionError,
+        );
       }
     });
 
@@ -240,12 +243,10 @@ const Dashboard = () => {
     metrics.vehicles - metrics.activeVehicles,
   );
   const hasAlerts =
-    metrics.openTickets > 0 ||
-    metrics.openIncidents > 0 ||
-    offlineVehicles > 0;
+    metrics.openTickets > 0 || metrics.openIncidents > 0 || offlineVehicles > 0;
 
   return (
-    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 6, xl: 8 }}>
+    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
       <PageHeader
         eyebrow="PLATFORM OPERATIONS"
         title="Support dashboard"
@@ -259,7 +260,9 @@ const Dashboard = () => {
               bg={realtimeConnected ? "green.500" : "gray.400"}
             />
             <Text color="gray.500" fontSize="xs">
-              {realtimeConnected ? "Live updates connected" : "Syncing every 30s"}
+              {realtimeConnected
+                ? "Live updates connected"
+                : "Syncing every 30s"}
             </Text>
           </HStack>
         }
@@ -339,7 +342,11 @@ const Dashboard = () => {
                 Needs attention
               </Heading>
               {hasAlerts ? (
-                <VStack align="stretch" spacing={0} divider={<Box borderTop="1px solid" borderColor="gray.100" />}>
+                <VStack
+                  align="stretch"
+                  spacing={0}
+                  divider={<Box borderTop="1px solid" borderColor="gray.100" />}
+                >
                   {metrics.openTickets > 0 ? (
                     <Button
                       variant="ghost"
@@ -371,7 +378,9 @@ const Dashboard = () => {
                             {metrics.openTickets} open or in-progress requests
                           </Text>
                         </Box>
-                        <Text color="gray.400" fontSize="xl">›</Text>
+                        <Text color="gray.400" fontSize="xl">
+                          ›
+                        </Text>
                       </HStack>
                     </Button>
                   ) : null}
@@ -406,7 +415,9 @@ const Dashboard = () => {
                             {metrics.openIncidents} reports require review
                           </Text>
                         </Box>
-                        <Text color="gray.400" fontSize="xl">›</Text>
+                        <Text color="gray.400" fontSize="xl">
+                          ›
+                        </Text>
                       </HStack>
                     </Button>
                   ) : null}
@@ -438,11 +449,13 @@ const Dashboard = () => {
                             Vehicles not currently active
                           </Text>
                           <Text color="gray.600" fontSize="xs">
-                            {offlineVehicles} of {metrics.vehicles} vehicles
-                            are not in an active tracking session
+                            {offlineVehicles} of {metrics.vehicles} vehicles are
+                            not in an active tracking session
                           </Text>
                         </Box>
-                        <Text color="gray.400" fontSize="xl">›</Text>
+                        <Text color="gray.400" fontSize="xl">
+                          ›
+                        </Text>
                       </HStack>
                     </Button>
                   ) : null}
@@ -505,7 +518,9 @@ const Dashboard = () => {
                   onClick={() => setActivityOpen((open) => !open)}
                   aria-expanded={activityOpen}
                   aria-controls="recent-platform-activity"
-                  rightIcon={<Icon as={activityOpen ? FiChevronUp : FiChevronDown} />}
+                  rightIcon={
+                    <Icon as={activityOpen ? FiChevronUp : FiChevronDown} />
+                  }
                   _hover={{ bg: "gray.50" }}
                   _active={{ bg: "gray.100" }}
                 >
@@ -520,19 +535,25 @@ const Dashboard = () => {
               <Collapse in={activityOpen} animateOpacity>
                 <Box id="recent-platform-activity" pt={2}>
                   {recentActivity.length ? (
-                    <VStack align="stretch" spacing={0} divider={<Box borderTop="1px solid" borderColor="gray.100" />}>
+                    <VStack
+                      align="stretch"
+                      spacing={0}
+                      divider={
+                        <Box borderTop="1px solid" borderColor="gray.100" />
+                      }
+                    >
                       {recentActivity.map((item) => {
                         const relatedUser = Array.isArray(item.users)
                           ? item.users[0]
                           : item.users;
                         return (
-                          <Flex
-                            key={item.id}
-                            align="center"
-                            gap={3}
-                            py={3}
-                          >
-                            <Box w="9px" h="9px" borderRadius="full" bg="blue.500" />
+                          <Flex key={item.id} align="center" gap={3} py={3}>
+                            <Box
+                              w="9px"
+                              h="9px"
+                              borderRadius="full"
+                              bg="blue.500"
+                            />
                             <Box flex="1" minW={0}>
                               <Text
                                 color="gray.800"
@@ -542,8 +563,14 @@ const Dashboard = () => {
                               >
                                 {item.action}
                               </Text>
-                              <Text color="gray.600" fontSize="xs" noOfLines={1}>
-                                {relatedUser?.name || relatedUser?.email || "System"}
+                              <Text
+                                color="gray.600"
+                                fontSize="xs"
+                                noOfLines={1}
+                              >
+                                {relatedUser?.name ||
+                                  relatedUser?.email ||
+                                  "System"}
                                 {item.entity_type
                                   ? ` · ${item.entity_type.replaceAll("_", " ")}`
                                   : ""}

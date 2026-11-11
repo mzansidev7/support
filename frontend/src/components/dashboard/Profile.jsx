@@ -38,7 +38,7 @@ import {
   FiShield,
   FiUser,
 } from "react-icons/fi";
-import "./Profile.css";
+import "../../styles/Profile.css";
 import PageHeader from "./PageHeader";
 
 const API_URL = (
@@ -50,7 +50,8 @@ const API_URL = (
 
 const apiRequest = async (path, options = {}) => {
   const token = localStorage.getItem("token");
-  if (!token) throw new Error("Your session has expired. Please sign in again.");
+  if (!token)
+    throw new Error("Your session has expired. Please sign in again.");
 
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -63,15 +64,20 @@ const apiRequest = async (path, options = {}) => {
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
     const messages = {
-      ADMIN_PROFILE_PHONE_IN_USE: "That phone number is already used by another account.",
+      ADMIN_PROFILE_PHONE_IN_USE:
+        "That phone number is already used by another account.",
       ADMIN_PROFILE_NAME_INVALID: "Enter a name of 1 to 120 characters.",
-      ADMIN_PROFILE_PHONE_INVALID: "Phone number must be 32 characters or fewer.",
+      ADMIN_PROFILE_PHONE_INVALID:
+        "Phone number must be 32 characters or fewer.",
       INVALID_CURRENT_PASSWORD: "Your current password is incorrect.",
       PASSWORD_TOO_SHORT: "Your new password must be at least 8 characters.",
       PASSWORD_TOO_LONG: "Your new password must be 128 characters or fewer.",
     };
     throw new Error(
-      messages[result.error] || result.message || result.error || "The request could not be completed.",
+      messages[result.error] ||
+        result.message ||
+        result.error ||
+        "The request could not be completed.",
     );
   }
   return result;
@@ -140,7 +146,8 @@ const Profile = () => {
   const profileChanged =
     profile &&
     savedProfile &&
-    (profile.name !== savedProfile.name || profile.phone !== savedProfile.phone);
+    (profile.name !== savedProfile.name ||
+      profile.phone !== savedProfile.phone);
 
   const changeProfile = (field, value) => {
     setProfile((current) => ({ ...current, [field]: value }));
@@ -219,7 +226,11 @@ const Profile = () => {
           newPassword: passwords.newPassword,
         }),
       });
-      setPasswords({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setPasswords({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
       toast({
         title: "Password updated",
         description: "Your password was changed successfully.",
@@ -249,8 +260,12 @@ const Profile = () => {
       <Box className="support-profile-page">
         <Alert status="error" borderRadius="xl">
           <AlertIcon />
-          <AlertDescription>{error || "Your profile could not be loaded."}</AlertDescription>
-          <Button ml="auto" size="sm" onClick={loadProfile}>Try again</Button>
+          <AlertDescription>
+            {error || "Your profile could not be loaded."}
+          </AlertDescription>
+          <Button ml="auto" size="sm" onClick={loadProfile}>
+            Try again
+          </Button>
         </Alert>
       </Box>
     );
@@ -261,17 +276,23 @@ const Profile = () => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
   return (
-    <Box className="support-profile-page">
+    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
       <PageHeader
         eyebrow="ACCOUNT"
         title="My Profile"
         description="Manage your support account information and security."
         actions={
-          <Badge colorScheme="green" variant="subtle" px={3} py={1.5} borderRadius="full">
-          <HStack spacing={1.5}>
-            <Icon as={FiCheck} />
-            <Text>Account active</Text>
-          </HStack>
+          <Badge
+            colorScheme="green"
+            variant="subtle"
+            px={3}
+            py={1.5}
+            borderRadius="full"
+          >
+            <HStack spacing={1.5}>
+              <Icon as={FiCheck} />
+              <Text>Account active</Text>
+            </HStack>
           </Badge>
         }
       />
@@ -286,10 +307,19 @@ const Profile = () => {
       <Card className="profile-card">
         <CardBody>
           <Flex className="profile-identity" align="center" gap={4}>
-            <Avatar size="lg" name={profile.name || profile.email} bg="blue.500" color="white" />
+            <Avatar
+              size="lg"
+              name={profile.name || profile.email}
+              bg="blue.500"
+              color="white"
+            />
             <Box minW={0}>
-              <Heading size="md" noOfLines={1}>{profile.name || "Support user"}</Heading>
-              <Text className="profile-identity-email" noOfLines={1}>{profile.email}</Text>
+              <Heading size="md" noOfLines={1}>
+                {profile.name || "Support user"}
+              </Heading>
+              <Text className="profile-identity-email" noOfLines={1}>
+                {profile.email}
+              </Text>
             </Box>
             <Badge className="profile-role-badge" colorScheme="blue" ml="auto">
               <HStack spacing={1.5}>
@@ -314,7 +344,9 @@ const Profile = () => {
                       value={profile.name}
                       maxLength={120}
                       autoComplete="name"
-                      onChange={(event) => changeProfile("name", event.target.value)}
+                      onChange={(event) =>
+                        changeProfile("name", event.target.value)
+                      }
                     />
                   </InputGroup>
                 </FormControl>
@@ -326,7 +358,9 @@ const Profile = () => {
                     </InputLeftElement>
                     <Input value={profile.email} isReadOnly bg="gray.50" />
                   </InputGroup>
-                  <Text className="profile-field-hint">Contact an administrator to change your login email.</Text>
+                  <Text className="profile-field-hint">
+                    Contact an administrator to change your login email.
+                  </Text>
                 </FormControl>
                 <FormControl>
                   <FormLabel>Phone number</FormLabel>
@@ -338,7 +372,9 @@ const Profile = () => {
                       value={profile.phone}
                       maxLength={32}
                       autoComplete="tel"
-                      onChange={(event) => changeProfile("phone", event.target.value)}
+                      onChange={(event) =>
+                        changeProfile("phone", event.target.value)
+                      }
                     />
                   </InputGroup>
                 </FormControl>
@@ -350,7 +386,9 @@ const Profile = () => {
                     </InputLeftElement>
                     <Input value={roleLabel} isReadOnly bg="gray.50" />
                   </InputGroup>
-                  <Text className="profile-field-hint">Your role controls access to support tools.</Text>
+                  <Text className="profile-field-hint">
+                    Your role controls access to support tools.
+                  </Text>
                 </FormControl>
               </SimpleGrid>
 
@@ -380,7 +418,9 @@ const Profile = () => {
       <Card className="profile-card profile-security-card">
         <CardBody>
           <Flex align="flex-start" gap={3} mb={5}>
-            <span className="profile-section-icon"><Icon as={FiLock} /></span>
+            <span className="profile-section-icon">
+              <Icon as={FiLock} />
+            </span>
             <Box>
               <Heading size="sm">Password & security</Heading>
               <Text className="profile-section-description">
@@ -407,10 +447,17 @@ const Profile = () => {
                     <InputGroup>
                       <Input
                         type={visiblePasswords[field] ? "text" : "password"}
-                        autoComplete={field === "currentPassword" ? "current-password" : "new-password"}
+                        autoComplete={
+                          field === "currentPassword"
+                            ? "current-password"
+                            : "new-password"
+                        }
                         value={passwords[field]}
                         onChange={(event) =>
-                          setPasswords((current) => ({ ...current, [field]: event.target.value }))
+                          setPasswords((current) => ({
+                            ...current,
+                            [field]: event.target.value,
+                          }))
                         }
                       />
                       <InputRightElement>
@@ -419,7 +466,11 @@ const Profile = () => {
                           variant="ghost"
                           size="sm"
                           aria-label={`${visiblePasswords[field] ? "Hide" : "Show"} ${label.toLowerCase()}`}
-                          icon={<Icon as={visiblePasswords[field] ? FiEyeOff : FiEye} />}
+                          icon={
+                            <Icon
+                              as={visiblePasswords[field] ? FiEyeOff : FiEye}
+                            />
+                          }
                           onClick={() =>
                             setVisiblePasswords((current) => ({
                               ...current,
@@ -433,14 +484,20 @@ const Profile = () => {
                 ))}
               </SimpleGrid>
               <Flex justify="space-between" align="center" wrap="wrap" gap={3}>
-                <Text className="profile-field-hint">Use at least 8 characters.</Text>
+                <Text className="profile-field-hint">
+                  Use at least 8 characters.
+                </Text>
                 <Button
                   type="submit"
                   colorScheme="blue"
                   variant="outline"
                   leftIcon={<Icon as={FiLock} />}
                   isLoading={changingPassword}
-                  isDisabled={!passwords.currentPassword || !passwords.newPassword || !passwords.confirmPassword}
+                  isDisabled={
+                    !passwords.currentPassword ||
+                    !passwords.newPassword ||
+                    !passwords.confirmPassword
+                  }
                 >
                   Update password
                 </Button>

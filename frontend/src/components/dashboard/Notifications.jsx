@@ -12,11 +12,27 @@ import {
   Heading,
   HStack,
   Icon,
+  Select,
+  Table,
+  TableContainer,
   Spinner,
   Stack,
   Text,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
 } from "@chakra-ui/react";
-import { FiAlertTriangle, FiBell, FiCheck, FiRefreshCw, FiUsers } from "react-icons/fi";
+import {
+  FiAlertTriangle,
+  FiBell,
+  FiCheck,
+  FiChevronLeft,
+  FiChevronRight,
+  FiRefreshCw,
+  FiUsers,
+} from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import PageHeader from "./PageHeader";
@@ -28,8 +44,10 @@ const API_URL = (
     : "https://track-my-kid-server-production.up.railway.app")
 ).replace(/\/$/, "");
 const PAGE_SIZE = 50;
+const DISPLAY_PAGE_SIZE = 14;
 const REFRESH_INTERVAL_MS = 30_000;
 const CACHE_PREFIX = "support-notifications-inbox";
+const AUTHORIZATION_HEADER = "Authorization";
 const REALTIME_RESOURCES = new Set(["support_notifications"]);
 
 const getCacheKey = () => {
@@ -44,7 +62,9 @@ const getCacheKey = () => {
 const readCache = () => {
   try {
     const cache = JSON.parse(localStorage.getItem(getCacheKey()) || "null");
-    return Array.isArray(cache?.notifications) ? cache.notifications : [];
+    return Array.isArray(cache?.notifications)
+      ? cache.notifications.slice(0, PAGE_SIZE)
+      : [];
   } catch (cacheError) {
     console.warn("Could not read cached support notifications:", cacheError);
     return [];
@@ -64,60 +84,44 @@ const Notifications = () => {
   const [initialNotifications] = useState(readCache);
   const [notifications, setNotifications] = useState(initialNotifications);
   const [loading, setLoading] = useState(initialNotifications.length === 0);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [readFilter, setReadFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
 
-  const loadNotifications = useCallback(async ({ refresh = false, offset = 0 } = {}) => {
+  const loadNotifications = useCallback(async ({ refresh = false } = {}) => {
     if (inFlight.current) return;
     inFlight.current = true;
     const token = localStorage.getItem("token");
     if (!token) {
       setError("Your support session has expired. Please sign in again.");
       setLoading(false);
-      setLoadingMore(false);
       setRefreshing(false);
       inFlight.current = false;
       return;
     }
 
     if (refresh) setRefreshing(true);
-    else if (offset > 0) setLoadingMore(true);
     else setLoading(true);
     setError("");
 
     try {
-      const response = await fetch(
-        `${API_URL}/admin/support-notifications?offset=${offset}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const response = await fetch(`${API_URL}/admin/support-notifications`, {
+        headers: { [AUTHORIZATION_HEADER]: ["Bearer", token].join(" ") },
+      });
       const result = await response.json();
       if (!response.ok || !Array.isArray(result)) {
         throw new Error(result?.error || "Unable to load notifications.");
       }
-      setNotifications((current) => {
-        if (offset) {
-          const knownIds = new Set(current.map((item) => item.id));
-          return [...current, ...result.filter((item) => !knownIds.has(item.id))];
-        }
-        if (current.length > result.length) {
-          const refreshedIds = new Set(result.map((item) => item.id));
-          return [
-            ...result,
-            ...current.filter((item) => !refreshedIds.has(item.id)),
-          ];
-        }
-        return result;
-      });
-      setHasMore(result.length === PAGE_SIZE);
+      setNotifications(result.slice(0, PAGE_SIZE));
     } catch (requestError) {
       console.error("Could not load support notifications:", requestError);
       setError(requestError?.message || "Unable to load notifications.");
     } finally {
       setLoading(false);
-      setLoadingMore(false);
       setRefreshing(false);
       inFlight.current = false;
     }
@@ -189,12 +193,14 @@ const Notifications = () => {
         `${API_URL}/admin/support-notifications/${encodeURIComponent(notification.id)}/read`,
         {
           method: "PATCH",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { [AUTHORIZATION_HEADER]: ["Bearer", token].join(" ") },
         },
       );
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result?.error || "Unable to mark notification as read.");
+        throw new Error(
+          result?.error || "Unable to mark notification as read.",
+        );
       }
       setNotifications((current) =>
         current.map((item) =>
@@ -205,9 +211,65 @@ const Notifications = () => {
       );
       return true;
     } catch (requestError) {
-      console.error("Could not mark support notification as read:", requestError);
+      console.error(
+        "Could not mark support notification as read:",
+        requestError,
+      );
       setError(requestError?.message || "Unable to update notification.");
       return false;
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    if (!unreadCount || markingAllRead) return;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setError("Your support session has expired. Please sign in again.");
+      return;
+    }
+
+    setMarkingAllRead(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/admin/support-notifications/read-all`,
+        {
+          method: "PATCH",
+          headers: { [AUTHORIZATION_HEADER]: ["Bearer", token].join(" ") },
+        },
+      );
+      const result = await response.json();
+      if (!response.ok || !Array.isArray(result.notifications)) {
+        throw new Error(
+          result?.error || "Unable to mark all notifications as read.",
+        );
+      }
+      const readAtById = new Map(
+        result.notifications.map((notification) => [
+          notification.id,
+          notification.read_at,
+        ]),
+      );
+      setNotifications((current) =>
+        current.map((notification) =>
+          readAtById.has(notification.id)
+            ? {
+                ...notification,
+                read_at: readAtById.get(notification.id),
+              }
+            : notification,
+        ),
+      );
+    } catch (requestError) {
+      console.error(
+        "Could not mark all support notifications as read:",
+        requestError,
+      );
+      setError(
+        requestError?.message || "Unable to mark all notifications as read.",
+      );
+    } finally {
+      setMarkingAllRead(false);
     }
   };
 
@@ -217,19 +279,71 @@ const Notifications = () => {
       if (!markedRead) return;
     }
 
-    if (notification.entity_type === "incident_report") {
-      navigate("/requests?tab=incidents");
-    } else if (notification.entity_type === "support_ticket") {
-      navigate("/requests?tab=tickets");
+    if (
+      ["incident_report", "support_ticket", "emergency_alert"].includes(
+        notification.entity_type,
+      ) &&
+      notification.entity_id
+    ) {
+      const params = new URLSearchParams();
+      params.set(
+        "tab",
+        notification.entity_type === "incident_report"
+          ? "incidents"
+          : notification.entity_type === "support_ticket"
+            ? "tickets"
+            : "sos",
+      );
+      params.set("openType", notification.entity_type);
+      params.set("openId", notification.entity_id);
+      navigate(`/requests?${params.toString()}`);
+    } else if (notification.entity_type === "support_settings") {
+      const params = new URLSearchParams({
+        configurationHistory: "1",
+        historyAt: notification.created_at || "",
+      });
+      if (notification.entity_id) {
+        params.set("historyId", notification.entity_id);
+      }
+      navigate(`/settings?${params.toString()}`);
     } else {
       navigate("/requests");
     }
   };
 
   const unreadCount = notifications.filter((item) => !item.read_at).length;
+  const notificationTypes = [
+    ...new Set(
+      notifications.map(
+        (notification) => notification.entity_type || "support",
+      ),
+    ),
+  ].sort();
+  const filteredNotifications = notifications.filter((notification) => {
+    const matchesReadStatus =
+      readFilter === "all" ||
+      (readFilter === "unread" && !notification.read_at) ||
+      (readFilter === "read" && Boolean(notification.read_at));
+    const matchesType =
+      typeFilter === "all" ||
+      (notification.entity_type || "support") === typeFilter;
+    return matchesReadStatus && matchesType;
+  });
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredNotifications.length / DISPLAY_PAGE_SIZE),
+  );
+  const visibleNotifications = filteredNotifications.slice(
+    (page - 1) * DISPLAY_PAGE_SIZE,
+    page * DISPLAY_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, pageCount));
+  }, [pageCount]);
 
   return (
-    <Box>
+    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
       <PageHeader
         eyebrow="SUPPORT WORKSPACE"
         title="Notifications"
@@ -268,9 +382,24 @@ const Notifications = () => {
                   : "You’re all caught up"}
               </Text>
             </Box>
-            <Badge colorScheme={unreadCount ? "orange" : "gray"} borderRadius="full" px={2}>
+            <Badge
+              colorScheme={unreadCount ? "orange" : "gray"}
+              borderRadius="full"
+              px={2}
+            >
               {notifications.length} total
             </Badge>
+            <Button
+              size="sm"
+              leftIcon={<Icon as={FiCheck} />}
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => void markAllNotificationsRead()}
+              isLoading={markingAllRead}
+              isDisabled={!unreadCount || markingAllRead}
+            >
+              Mark all
+            </Button>
           </Flex>
         </CardBody>
       </Card>
@@ -296,77 +425,193 @@ const Notifications = () => {
         </Flex>
       ) : notifications.length ? (
         <Stack spacing={3}>
-          {notifications.map((notification) => {
-            const unread = !notification.read_at;
-            const isIncident = notification.entity_type === "incident_report";
-            return (
-              <Card
-                key={notification.id}
-                border="1px solid"
-                borderColor={unread ? "blue.200" : "gray.200"}
-                bg={unread ? "blue.50" : "white"}
-                shadow="sm"
-                _hover={{ shadow: "md", borderColor: "blue.300" }}
-                cursor="pointer"
-                onClick={() => void openNotification(notification)}
+          <Card border="1px solid" borderColor="gray.200" shadow="sm">
+            <Flex
+              px={4}
+              py={3}
+              gap={3}
+              wrap="wrap"
+              align="center"
+              borderBottom="1px solid"
+              borderColor="gray.100"
+            >
+              <Text fontSize="sm" fontWeight="700" color="gray.700">
+                Filter:
+              </Text>
+              <Select
+                aria-label="Filter notifications by read status"
+                size="sm"
+                maxW="180px"
+                value={readFilter}
+                onChange={(event) => {
+                  setReadFilter(event.target.value);
+                  setPage(1);
+                }}
               >
-                <CardBody>
-                  <Flex align="flex-start" gap={3}>
-                    <Flex
-                      align="center"
-                      justify="center"
-                      flexShrink={0}
-                      w={10}
-                      h={10}
-                      borderRadius="xl"
-                      bg={isIncident ? "orange.100" : "purple.100"}
-                      color={isIncident ? "orange.700" : "purple.700"}
-                    >
-                      <Icon as={isIncident ? FiAlertTriangle : FiUsers} boxSize={5} />
-                    </Flex>
-                    <Box flex="1" minW={0}>
-                      <HStack spacing={2} mb={1} wrap="wrap">
-                        <Heading size="sm">{notification.title}</Heading>
-                        {unread ? <Badge colorScheme="blue">New</Badge> : null}
-                        <Badge colorScheme={isIncident ? "orange" : "purple"}>
-                          {String(notification.entity_type || "support")
-                            .replaceAll("_", " ")}
-                        </Badge>
-                      </HStack>
-                      <Text fontSize="sm" color="gray.700" whiteSpace="pre-wrap">
-                        {notification.message}
-                      </Text>
-                      <Text fontSize="xs" color="gray.500" mt={2}>
-                        {formatDateTime(notification.created_at)}
-                      </Text>
-                    </Box>
-                    {!unread ? (
-                      <Icon as={FiCheck} color="green.500" aria-label="Read" />
-                    ) : null}
-                  </Flex>
-                </CardBody>
-              </Card>
-            );
-          })}
-          {hasMore ? (
-            <Flex justify="center" py={2}>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  void loadNotifications({ offset: notifications.length })
-                }
-                isLoading={loadingMore}
+                <option value="all">All statuses</option>
+                <option value="unread">Unread</option>
+                <option value="read">Read</option>
+              </Select>
+              <Select
+                aria-label="Filter notifications by type"
+                size="sm"
+                maxW="220px"
+                value={typeFilter}
+                onChange={(event) => {
+                  setTypeFilter(event.target.value);
+                  setPage(1);
+                }}
               >
-                Load older notifications
-              </Button>
+                <option value="all">All types</option>
+                {notificationTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type.replaceAll("_", " ")}
+                  </option>
+                ))}
+              </Select>
+              <Text ml="auto" fontSize="sm" color="gray.500">
+                {filteredNotifications.length} matching notifications
+              </Text>
             </Flex>
-          ) : null}
+            <TableContainer>
+              <Table size="sm" variant="simple">
+                <Thead bg="gray.50">
+                  <Tr>
+                    <Th>Type</Th>
+                    <Th>Notification</Th>
+                    <Th>Message</Th>
+                    <Th>Received</Th>
+                    <Th>Status</Th>
+                    <Th textAlign="right">Action</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {visibleNotifications.length ? (
+                    visibleNotifications.map((notification) => {
+                      const unread = !notification.read_at;
+                      const isIncident =
+                        notification.entity_type === "incident_report";
+                      return (
+                        <Tr
+                          key={notification.id}
+                          bg={unread ? "blue.50" : "white"}
+                          _hover={{ bg: unread ? "blue.100" : "gray.50" }}
+                        >
+                          <Td>
+                            <HStack spacing={2}>
+                              <Icon
+                                as={isIncident ? FiAlertTriangle : FiUsers}
+                                color={isIncident ? "orange.600" : "purple.600"}
+                              />
+                              <Text textTransform="capitalize">
+                                {String(
+                                  notification.entity_type || "support",
+                                ).replaceAll("_", " ")}
+                              </Text>
+                            </HStack>
+                          </Td>
+                          <Td minW="190px">
+                            <Text fontWeight="700">{notification.title}</Text>
+                          </Td>
+                          <Td minW="240px" maxW="420px">
+                            <Text fontSize="sm" color="gray.700" noOfLines={2}>
+                              {notification.message}
+                            </Text>
+                          </Td>
+                          <Td whiteSpace="nowrap">
+                            <Text fontSize="sm" color="gray.600">
+                              {formatDateTime(notification.created_at)}
+                            </Text>
+                          </Td>
+                          <Td>
+                            <Badge colorScheme={unread ? "blue" : "green"}>
+                              {unread ? "Unread" : "Read"}
+                            </Badge>
+                          </Td>
+                          <Td textAlign="right">
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              colorScheme="blue"
+                              onClick={() =>
+                                void openNotification(notification)
+                              }
+                            >
+                              View
+                            </Button>
+                          </Td>
+                        </Tr>
+                      );
+                    })
+                  ) : (
+                    <Tr>
+                      <Td colSpan={6} py={8} textAlign="center">
+                        <Text color="gray.500">
+                          No notifications match these filters.
+                        </Text>
+                      </Td>
+                    </Tr>
+                  )}
+                </Tbody>
+              </Table>
+            </TableContainer>
+            <Flex
+              align="center"
+              justify="space-between"
+              gap={3}
+              px={4}
+              py={3}
+              borderTop="1px solid"
+              borderColor="gray.100"
+              wrap="wrap"
+            >
+              <Text fontSize="sm" color="gray.500">
+                Showing{" "}
+                {filteredNotifications.length
+                  ? (page - 1) * DISPLAY_PAGE_SIZE + 1
+                  : 0}
+                –
+                {Math.min(
+                  page * DISPLAY_PAGE_SIZE,
+                  filteredNotifications.length,
+                )}{" "}
+                of {filteredNotifications.length} notifications
+              </Text>
+              <HStack spacing={2}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  leftIcon={<Icon as={FiChevronLeft} />}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  isDisabled={page <= 1}
+                >
+                  Previous
+                </Button>
+                <Text fontSize="sm" color="gray.600">
+                  Page {page} of {pageCount}
+                </Text>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  rightIcon={<Icon as={FiChevronRight} />}
+                  onClick={() =>
+                    setPage((current) => Math.min(pageCount, current + 1))
+                  }
+                  isDisabled={page >= pageCount}
+                >
+                  Next
+                </Button>
+              </HStack>
+            </Flex>
+          </Card>
         </Stack>
       ) : !error ? (
         <Card border="1px solid" borderColor="gray.200" shadow="sm">
           <CardBody py={12} textAlign="center">
             <Icon as={FiBell} boxSize={9} color="gray.400" />
-            <Heading size="sm" mt={3}>No notifications yet</Heading>
+            <Heading size="sm" mt={3}>
+              No notifications yet
+            </Heading>
             <Text fontSize="sm" color="gray.600" mt={1}>
               New support and incident updates will appear here.
             </Text>

@@ -15,6 +15,7 @@ import {
   Card,
   CardBody,
   Checkbox,
+  Code,
   Divider,
   Flex,
   FormControl,
@@ -23,6 +24,14 @@ import {
   HStack,
   Icon,
   Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
+  Select,
   SimpleGrid,
   Spinner,
   Switch,
@@ -45,20 +54,24 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiClock,
+  FiDownload,
+  FiFileText,
   FiSettings,
   FiLock,
+  FiKey,
   FiMessageCircle,
   FiRefreshCw,
+  FiSearch,
   FiSave,
   FiZap,
 } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import {
   getCurrentUserIds,
   isCurrentUserId,
-} from "../../utils/currentUserIdentity";
-import "./Settings.css";
+} from "../../utils/asyncStorage/currentUserIdentity";
+import "../../styles/Settings.css";
 import PageHeader from "./PageHeader";
 
 const API_URL = (
@@ -161,6 +174,244 @@ const formatDate = (value) => {
     ? "Date unavailable"
     : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 };
+
+const renderAuditInline = (value, keyPrefix) =>
+  value.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <Text as="span" fontWeight="700" key={`${keyPrefix}-${index}`}>
+          {part.slice(2, -2)}
+        </Text>
+      );
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <Code
+          fontSize="0.88em"
+          px={1}
+          borderRadius="sm"
+          key={`${keyPrefix}-${index}`}
+        >
+          {part.slice(1, -1)}
+        </Code>
+      );
+    }
+    return part;
+  });
+
+const parseAuditTableRow = (line) =>
+  line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+
+const isAuditTableDivider = (line) => /^\|?[\s:|-]+\|?$/.test(line);
+
+function AuditReportContent({ report }) {
+  const lines = report.split(/\r?\n/);
+  const blocks = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    if (!line) {
+      index += 1;
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      if (level > 1) {
+        blocks.push({
+          type: "heading",
+          level,
+          text: heading[2],
+          key: `heading-${index}`,
+        });
+      }
+      index += 1;
+      continue;
+    }
+
+    if (line.startsWith("|")) {
+      const rows = [];
+      while (index < lines.length && lines[index].trim().startsWith("|")) {
+        const tableLine = lines[index].trim();
+        if (!isAuditTableDivider(tableLine)) {
+          rows.push(parseAuditTableRow(tableLine));
+        }
+        index += 1;
+      }
+      if (rows.length) {
+        blocks.push({ type: "table", rows, key: `table-${index}` });
+      }
+      continue;
+    }
+
+    const listItem = line.match(/^(\s*)([-*+]|\d+\.)\s+(.+)$/);
+    if (listItem) {
+      const ordered = /^\d/.test(listItem[2]);
+      const items = [];
+      while (index < lines.length) {
+        const current = lines[index].trim().match(/^([-*+]|\d+\.)\s+(.+)$/);
+        if (!current || ordered !== /^\d/.test(current[1])) break;
+        items.push(current[2]);
+        index += 1;
+      }
+      blocks.push({ type: "list", ordered, items, key: `list-${index}` });
+      continue;
+    }
+
+    const paragraph = [line];
+    index += 1;
+    while (
+      index < lines.length &&
+      lines[index].trim() &&
+      !/^(#{1,6})\s+/.test(lines[index].trim()) &&
+      !lines[index].trim().startsWith("|") &&
+      !/^(\s*)([-*+]|\d+\.)\s+/.test(lines[index])
+    ) {
+      paragraph.push(lines[index].trim());
+      index += 1;
+    }
+    blocks.push({
+      type: "paragraph",
+      text: paragraph.join(" "),
+      key: `paragraph-${index}`,
+    });
+  }
+
+  return (
+    <VStack align="stretch" spacing={{ base: 4, md: 5 }}>
+      {blocks.map((block) => {
+        if (block.type === "heading") {
+          const headingProps =
+            block.level === 2
+              ? { size: "md", mt: 2, pb: 2, borderBottom: "1px solid", borderColor: "gray.100" }
+              : { size: "sm", mt: 1 };
+          return (
+            <Heading
+              key={block.key}
+              {...headingProps}
+              color="gray.800"
+              lineHeight="1.35"
+            >
+              {renderAuditInline(block.text, block.key)}
+            </Heading>
+          );
+        }
+
+        if (block.type === "table") {
+          const [header, ...body] = block.rows;
+          return (
+            <TableContainer
+              key={block.key}
+              border="1px solid"
+              borderColor="gray.200"
+              borderRadius="xl"
+              bg="white"
+              maxW="100%"
+              overflowX="auto"
+            >
+              <Table size="sm" variant="simple">
+                <Thead bg="blue.50">
+                  <Tr>
+                    {header.map((cell, cellIndex) => (
+                      <Th
+                        key={`${block.key}-header-${cellIndex}`}
+                        color="blue.900"
+                        fontSize="xs"
+                        letterSpacing="0.02em"
+                        textTransform="none"
+                        whiteSpace="normal"
+                        minW="120px"
+                        py={3}
+                      >
+                        {renderAuditInline(cell, `${block.key}-head-${cellIndex}`)}
+                      </Th>
+                    ))}
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {body.map((row, rowIndex) => (
+                    <Tr key={`${block.key}-row-${rowIndex}`}>
+                      {header.map((_, cellIndex) => {
+                        const cell = row[cellIndex] || "";
+                        const status = cell.toUpperCase();
+                        const statusColor = {
+                          COMPLETED: "green",
+                          PARTIAL: "orange",
+                          MISSING: "red",
+                          "NEEDS TESTING": "purple",
+                          "NOT APPLICABLE": "gray",
+                        }[status];
+                        return (
+                          <Td
+                            key={`${block.key}-cell-${rowIndex}-${cellIndex}`}
+                            color="gray.700"
+                            fontSize="sm"
+                            lineHeight="1.65"
+                            whiteSpace="normal"
+                            minW="120px"
+                            verticalAlign="top"
+                            py={3}
+                          >
+                            {statusColor ? (
+                              <Badge colorScheme={statusColor}>{status}</Badge>
+                            ) : (
+                              renderAuditInline(
+                                cell,
+                                `${block.key}-inline-${rowIndex}-${cellIndex}`,
+                              )
+                            )}
+                          </Td>
+                        );
+                      })}
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </TableContainer>
+          );
+        }
+
+        if (block.type === "list") {
+          return (
+            <Box
+              as={block.ordered ? "ol" : "ul"}
+              key={block.key}
+              pl={6}
+              color="gray.700"
+              fontSize="sm"
+              lineHeight="1.75"
+              sx={{ "& li + li": { marginTop: "0.5rem" } }}
+            >
+              {block.items.map((item, itemIndex) => (
+                <Box as="li" key={`${block.key}-${itemIndex}`} pl={1}>
+                  {renderAuditInline(item, `${block.key}-item-${itemIndex}`)}
+                </Box>
+              ))}
+            </Box>
+          );
+        }
+
+        return (
+          <Text
+            key={block.key}
+            color="gray.700"
+            fontSize="sm"
+            lineHeight="1.8"
+          >
+            {renderAuditInline(block.text, block.key)}
+          </Text>
+        );
+      })}
+    </VStack>
+  );
+}
 
 function SlaCard({ title, levels, settings, onChange, description }) {
   return (
@@ -271,6 +522,7 @@ function RoleCard({ permissions }) {
 
 const Settings = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = useMemo(readUser, []);
   const currentUserIds = useMemo(getCurrentUserIds, []);
   const isSuperAdmin = user?.admin_profile?.admin_role === "super_admin";
@@ -286,7 +538,7 @@ const Settings = () => {
   const [requestLogSearchId, setRequestLogSearchId] = useState("");
   const [showingRequestLogs, setShowingRequestLogs] = useState(false);
   const [showingConfigurationHistory, setShowingConfigurationHistory] =
-    useState(false);
+    useState(() => searchParams.get("configurationHistory") === "1");
   const [health, setHealth] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState("checking");
   const [updatedAt, setUpdatedAt] = useState(null);
@@ -294,7 +546,52 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [systemAudit, setSystemAudit] = useState(null);
+  const [systemAuditLoading, setSystemAuditLoading] = useState(false);
+  const [systemAuditError, setSystemAuditError] = useState("");
+  const [systemAuditOpen, setSystemAuditOpen] = useState(false);
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+  const [passwordRecoveryUsers, setPasswordRecoveryUsers] = useState([]);
+  const [passwordRecoveryTotal, setPasswordRecoveryTotal] = useState(0);
+  const [passwordRecoveryPage, setPasswordRecoveryPage] = useState(1);
+  const [passwordRecoverySearchInput, setPasswordRecoverySearchInput] =
+    useState("");
+  const [passwordRecoverySearch, setPasswordRecoverySearch] = useState("");
+  const [passwordRecoveryRole, setPasswordRecoveryRole] = useState("all");
+  const [passwordRecoveryLoading, setPasswordRecoveryLoading] =
+    useState(false);
+  const [passwordRecoveryError, setPasswordRecoveryError] = useState("");
+  const [passwordRecoveryTarget, setPasswordRecoveryTarget] = useState(null);
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [temporaryPasswordLoading, setTemporaryPasswordLoading] =
+    useState(false);
+  const [temporaryPasswordError, setTemporaryPasswordError] = useState("");
+  const [temporaryPasswordAuditWarning, setTemporaryPasswordAuditWarning] =
+    useState("");
   const settingsRefreshTimer = useRef(null);
+  const highlightedHistoryRef = useRef(null);
+  const requestedHistoryId = searchParams.get("historyId");
+  const requestedHistoryAt = searchParams.get("historyAt");
+  const highlightedHistoryId = useMemo(() => {
+    if (requestedHistoryId) {
+      return history.some((entry) => entry.id === requestedHistoryId)
+        ? requestedHistoryId
+        : null;
+    }
+    if (!requestedHistoryAt) return null;
+
+    const requestedTime = new Date(requestedHistoryAt).getTime();
+    if (Number.isNaN(requestedTime)) return null;
+    const closestEntry = history.reduce(
+      (closest, entry) => {
+        const entryTime = new Date(entry.created_at || 0).getTime();
+        const distance = Math.abs(entryTime - requestedTime);
+        return distance < closest.distance ? { id: entry.id, distance } : closest;
+      },
+      { id: null, distance: Number.POSITIVE_INFINITY },
+    );
+    return closestEntry.distance <= 5 * 60 * 1000 ? closestEntry.id : null;
+  }, [history, requestedHistoryAt, requestedHistoryId]);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -315,6 +612,39 @@ const Settings = () => {
       setLoading(false);
     }
   }, []);
+
+  const openSystemAudit = async () => {
+    setSystemAuditLoading(true);
+    setSystemAuditError("");
+    try {
+      const result = await apiRequest("/admin/system-audit");
+      if (typeof result.report !== "string" || !result.fileName) {
+        throw new Error("The system audit report response was invalid.");
+      }
+      setSystemAudit(result);
+      setSystemAuditOpen(true);
+    } catch (requestError) {
+      setSystemAuditError(
+        requestError.message || "Unable to load the system audit report.",
+      );
+    } finally {
+      setSystemAuditLoading(false);
+    }
+  };
+
+  const downloadSystemAudit = () => {
+    if (!systemAudit) return;
+    const reportUrl = URL.createObjectURL(
+      new Blob([systemAudit.report], { type: "text/markdown;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = reportUrl;
+    link.download = systemAudit.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(reportUrl);
+  };
 
   const loadRequestLogs = useCallback(async () => {
     if (!isSuperAdmin) return;
@@ -338,6 +668,80 @@ const Settings = () => {
       setRequestLogsLoading(false);
     }
   }, [isSuperAdmin, requestLogFilter, requestLogSearchId]);
+
+  const loadPasswordRecoveryUsers = async (
+    page = 1,
+    search = passwordRecoverySearch,
+    role = passwordRecoveryRole,
+  ) => {
+    if (!isSuperAdmin) return;
+    setPasswordRecoveryLoading(true);
+    setPasswordRecoveryError("");
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+      });
+      if (search) params.set("search", search);
+      if (role !== "all") params.set("role", role);
+      const result = await apiRequest(
+        `/admin/password-recovery/users?${params.toString()}`,
+      );
+      setPasswordRecoveryUsers(result.users || []);
+      setPasswordRecoveryTotal(result.total || 0);
+      setPasswordRecoveryPage(result.page || page);
+    } catch (requestError) {
+      setPasswordRecoveryError(
+        requestError.message || "Unable to load users for password recovery.",
+      );
+    } finally {
+      setPasswordRecoveryLoading(false);
+    }
+  };
+
+  const submitPasswordRecoverySearch = (event) => {
+    event.preventDefault();
+    const search = passwordRecoverySearchInput.trim();
+    setPasswordRecoverySearch(search);
+    void loadPasswordRecoveryUsers(1, search, passwordRecoveryRole);
+  };
+
+  const changePasswordRecoveryRole = (role) => {
+    setPasswordRecoveryRole(role);
+    void loadPasswordRecoveryUsers(1, passwordRecoverySearch, role);
+  };
+
+  const issueTemporaryPassword = async () => {
+    if (!passwordRecoveryTarget) return;
+    setTemporaryPasswordLoading(true);
+    setTemporaryPasswordError("");
+    try {
+      const result = await apiRequest(
+        `/admin/users/${encodeURIComponent(passwordRecoveryTarget.id)}/temporary-password`,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setTemporaryPassword(result.temporary_password || "");
+      setTemporaryPasswordAuditWarning(result.audit_warning || "");
+      await loadPasswordRecoveryUsers(
+        passwordRecoveryPage,
+        passwordRecoverySearch,
+        passwordRecoveryRole,
+      );
+    } catch (requestError) {
+      setTemporaryPasswordError(
+        requestError.message || "Unable to generate a temporary password.",
+      );
+    } finally {
+      setTemporaryPasswordLoading(false);
+    }
+  };
+
+  const closePasswordRecoveryDialog = () => {
+    if (temporaryPasswordLoading) return;
+    setPasswordRecoveryTarget(null);
+    setTemporaryPassword("");
+    setTemporaryPasswordError("");
+    setTemporaryPasswordAuditWarning("");
+  };
 
   const sortedRequestLogs = useMemo(
     () =>
@@ -387,6 +791,21 @@ const Settings = () => {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (searchParams.get("configurationHistory") === "1") {
+      setShowingConfigurationHistory(true);
+      setShowingRequestLogs(false);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!showingConfigurationHistory || !highlightedHistoryId) return;
+    highlightedHistoryRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [highlightedHistoryId, showingConfigurationHistory]);
 
   useEffect(() => {
     loadRequestLogs();
@@ -576,6 +995,26 @@ const Settings = () => {
             >
               Refresh
             </Button>
+            {!showingRequestLogs &&
+            !showingConfigurationHistory &&
+            isSuperAdmin ? (
+              <Button
+                variant={showPasswordRecovery ? "solid" : "outline"}
+                colorScheme="orange"
+                leftIcon={<Icon as={FiKey} />}
+                onClick={() => {
+                  const nextOpen = !showPasswordRecovery;
+                  setShowPasswordRecovery(nextOpen);
+                  if (nextOpen) {
+                    setPasswordRecoverySearch("");
+                    setPasswordRecoverySearchInput("");
+                    void loadPasswordRecoveryUsers(1, "");
+                  }
+                }}
+              >
+                {showPasswordRecovery ? "Hide password recovery" : "Password recovery"}
+              </Button>
+            ) : null}
             {isSuperAdmin ? (
               <>
                 <Button
@@ -596,6 +1035,16 @@ const Settings = () => {
                   onClick={() => {
                     setShowingRequestLogs(false);
                     setShowingConfigurationHistory(true);
+                    setSearchParams(
+                      (current) => {
+                        const next = new URLSearchParams(current);
+                        next.delete("configurationHistory");
+                        next.delete("historyId");
+                        next.delete("historyAt");
+                        return next;
+                      },
+                      { replace: true },
+                    );
                   }}
                 >
                   Configuration history
@@ -607,6 +1056,16 @@ const Settings = () => {
                     onClick={() => {
                       setShowingRequestLogs(false);
                       setShowingConfigurationHistory(false);
+                      setSearchParams(
+                        (current) => {
+                          const next = new URLSearchParams(current);
+                          next.delete("configurationHistory");
+                          next.delete("historyId");
+                          next.delete("historyAt");
+                          return next;
+                        },
+                        { replace: true },
+                      );
                     }}
                   >
                     Support Control Center
@@ -661,6 +1120,221 @@ const Settings = () => {
                 controls.
               </AlertDescription>
             </Alert>
+          ) : null}
+
+          {isSuperAdmin ? (
+            <Card className="control-card" mb={5}>
+              <CardBody>
+                <Flex
+                  align={{ base: "stretch", md: "center" }}
+                  justify="space-between"
+                  gap={4}
+                  direction={{ base: "column", md: "row" }}
+                >
+                  <Box>
+                    <HStack spacing={2}>
+                      <Icon as={FiFileText} color="blue.500" />
+                      <Heading size="sm">System audit</Heading>
+                    </HStack>
+                    <Text className="control-description">
+                      Review the complete Track My Kid system audit, including
+                      feature status, evidence, risks, and remediation notes.
+                    </Text>
+                  </Box>
+                  <Button
+                    colorScheme="blue"
+                    variant="outline"
+                    leftIcon={<Icon as={FiFileText} />}
+                    onClick={openSystemAudit}
+                    isLoading={systemAuditLoading}
+                  >
+                    View system audit
+                  </Button>
+                </Flex>
+                {systemAuditError ? (
+                  <Alert status="error" borderRadius="lg" mt={4}>
+                    <AlertIcon />
+                    <AlertDescription>{systemAuditError}</AlertDescription>
+                  </Alert>
+                ) : null}
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {showPasswordRecovery && isSuperAdmin ? (
+            <Card className="control-card" mb={5}>
+              <CardBody>
+                <Flex
+                  justify="space-between"
+                  align={{ base: "stretch", md: "center" }}
+                  direction={{ base: "column", md: "row" }}
+                  gap={3}
+                >
+                  <Box>
+                    <Heading size="sm">User password recovery</Heading>
+                    <Text className="control-description">
+                      Generate a one-time temporary password for a verified
+                      user. It is shown once, and the user must replace it at
+                      their next sign-in.
+                    </Text>
+                  </Box>
+                  <form onSubmit={submitPasswordRecoverySearch}>
+                    <HStack>
+                      <Select
+                        aria-label="Filter password recovery users by role"
+                        value={passwordRecoveryRole}
+                        onChange={(event) =>
+                          changePasswordRecoveryRole(event.target.value)
+                        }
+                        maxW="180px"
+                        isDisabled={passwordRecoveryLoading}
+                      >
+                        <option value="all">All roles</option>
+                        <option value="client">Clients</option>
+                        <option value="driver">Drivers</option>
+                        <option value="owner">Owners</option>
+                        <option value="school">School users</option>
+                      </Select>
+                      <Input
+                        aria-label="Search users by name or email"
+                        placeholder="Search name or email"
+                        value={passwordRecoverySearchInput}
+                        onChange={(event) =>
+                          setPasswordRecoverySearchInput(event.target.value)
+                        }
+                      />
+                      <Button
+                        type="submit"
+                        leftIcon={<Icon as={FiSearch} />}
+                        isLoading={passwordRecoveryLoading}
+                      >
+                        Search
+                      </Button>
+                    </HStack>
+                  </form>
+                </Flex>
+
+                <Alert status="warning" borderRadius="lg" mt={4}>
+                  <AlertIcon />
+                  <AlertDescription fontSize="sm">
+                    Never send or store a user&apos;s permanent password. Share
+                    the temporary password privately; this screen will not show
+                    it again after you close the dialog.
+                  </AlertDescription>
+                </Alert>
+
+                {passwordRecoveryError ? (
+                  <Alert status="error" borderRadius="lg" mt={4}>
+                    <AlertIcon />
+                    <AlertDescription>{passwordRecoveryError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {passwordRecoveryLoading ? (
+                  <Flex justify="center" py={8}>
+                    <Spinner color="blue.500" />
+                  </Flex>
+                ) : passwordRecoveryUsers.length ? (
+                  <>
+                    <TableContainer mt={4}>
+                      <Table size="sm">
+                        <Thead>
+                          <Tr>
+                            <Th>User</Th>
+                            <Th>Email</Th>
+                            <Th>Role</Th>
+                            <Th>Password status</Th>
+                            <Th textAlign="right">Action</Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {passwordRecoveryUsers.map((recoveryUser) => (
+                            <Tr key={recoveryUser.id}>
+                              <Td>{recoveryUser.name || "Unnamed user"}</Td>
+                              <Td>{recoveryUser.email}</Td>
+                              <Td>
+                                <Badge textTransform="capitalize">
+                                  {recoveryUser.role}
+                                </Badge>
+                              </Td>
+                              <Td>
+                                {recoveryUser.must_change_password
+                                  ? "Temporary password already active"
+                                  : "Permanent password"}
+                              </Td>
+                              <Td textAlign="right">
+                                <Button
+                                  size="sm"
+                                  colorScheme="orange"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setPasswordRecoveryTarget(recoveryUser);
+                                    setTemporaryPassword("");
+                                    setTemporaryPasswordError("");
+                                    setTemporaryPasswordAuditWarning("");
+                                  }}
+                                >
+                                  Generate temporary password
+                                </Button>
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </TableContainer>
+                    <Flex justify="space-between" align="center" mt={3}>
+                      <Text fontSize="sm" color="gray.600">
+                        {passwordRecoveryTotal.toLocaleString()} verified users
+                      </Text>
+                      <HStack>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          isDisabled={
+                            passwordRecoveryPage <= 1 ||
+                            passwordRecoveryLoading
+                          }
+                          onClick={() =>
+                            void loadPasswordRecoveryUsers(
+                              passwordRecoveryPage - 1,
+                            )
+                          }
+                        >
+                          Previous
+                        </Button>
+                        <Text fontSize="sm">
+                          Page {passwordRecoveryPage} of{" "}
+                          {Math.max(
+                            1,
+                            Math.ceil(passwordRecoveryTotal / 100),
+                          )}
+                        </Text>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          isDisabled={
+                            passwordRecoveryPage >=
+                              Math.ceil(passwordRecoveryTotal / 100) ||
+                            passwordRecoveryLoading
+                          }
+                          onClick={() =>
+                            void loadPasswordRecoveryUsers(
+                              passwordRecoveryPage + 1,
+                            )
+                          }
+                        >
+                          Next
+                        </Button>
+                      </HStack>
+                    </Flex>
+                  </>
+                ) : (
+                  <Text color="gray.600" mt={5}>
+                    No verified users found for this search.
+                  </Text>
+                )}
+              </CardBody>
+            </Card>
           ) : null}
 
           <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={5} mb={5}>
@@ -1138,8 +1812,13 @@ const Settings = () => {
                                 {entry.method} {entry.path}
                               </Text>
                               <Text fontSize="xs" color="gray.500" mt={1}>
-                                {entry.error_code || "Request failed"}
+                                {entry.error_message || entry.error_code || "Request failed"}
                               </Text>
+                              {entry.error_code && entry.error_message ? (
+                                <Text fontSize="xs" color="gray.400" mt={1}>
+                                  Error code: {entry.error_code}
+                                </Text>
+                              ) : null}
                               <Text
                                 fontSize="xs"
                                 color="gray.400"
@@ -1286,11 +1965,31 @@ const Settings = () => {
                 {history.map((entry) => (
                   <Flex
                     key={entry.id}
+                    ref={
+                      entry.id === highlightedHistoryId
+                        ? highlightedHistoryRef
+                        : null
+                    }
                     justify="space-between"
                     align="flex-start"
                     gap={4}
                     py={3}
                     wrap="wrap"
+                    px={highlightedHistoryId === entry.id ? 3 : 0}
+                    mx={highlightedHistoryId === entry.id ? -3 : 0}
+                    borderRadius="lg"
+                    bg={
+                      highlightedHistoryId === entry.id
+                        ? "blue.50"
+                        : "transparent"
+                    }
+                    border="1px solid"
+                    borderColor={
+                      highlightedHistoryId === entry.id
+                        ? "blue.200"
+                        : "transparent"
+                    }
+                    transition="all 0.3s"
                   >
                     <Box>
                       <Text fontSize="sm" fontWeight="700">
@@ -1316,6 +2015,202 @@ const Settings = () => {
           </CardBody>
         </Card>
       ) : null}
+
+      <Modal
+        isOpen={systemAuditOpen}
+        onClose={() => setSystemAuditOpen(false)}
+        scrollBehavior="inside"
+        size="full"
+      >
+        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(4px)" />
+        <ModalContent
+          w="100vw"
+          maxW="100vw"
+          h="100dvh"
+          maxH="100dvh"
+          minH="100dvh"
+          m={0}
+          borderRadius={0}
+          overflow="hidden"
+          boxShadow="none"
+          display="flex"
+          flexDirection="column"
+        >
+          <ModalHeader
+            borderBottom="1px solid"
+            borderColor="gray.100"
+            px={{ base: 5, md: 8 }}
+            py={5}
+            pr={14}
+          >
+            <HStack align="center" spacing={4}>
+              <Flex
+                align="center"
+                justify="center"
+                flex="0 0 46px"
+                h="46px"
+                borderRadius="xl"
+                color="blue.600"
+                bg="blue.50"
+              >
+                <Icon as={FiFileText} boxSize={5} />
+              </Flex>
+              <Box minW={0}>
+                <HStack spacing={2} flexWrap="wrap">
+                  <Heading size="md" color="gray.800">
+                    Track My Kid system audit
+                  </Heading>
+                  <Badge colorScheme="blue" borderRadius="full" px={2}>
+                    Audit report
+                  </Badge>
+                </HStack>
+                <Text color="gray.500" fontSize="sm" fontWeight="normal" mt={1}>
+                  Findings, implementation evidence, risks, and recommended
+                  actions
+                </Text>
+              </Box>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton top={5} right={5} />
+          <ModalBody
+            bg="gray.50"
+            px={{ base: 4, md: 8 }}
+            py={{ base: 4, md: 6 }}
+            flex="1"
+            minH={0}
+          >
+            {systemAudit ? (
+              <Box
+                maxW="1280px"
+                mx="auto"
+                bg="white"
+                border="1px solid"
+                borderColor="gray.200"
+                borderRadius="xl"
+                boxShadow="sm"
+                p={{ base: 4, md: 7 }}
+              >
+                <AuditReportContent report={systemAudit.report} />
+              </Box>
+            ) : null}
+          </ModalBody>
+          <ModalFooter
+            gap={3}
+            borderTop="1px solid"
+            borderColor="gray.100"
+            px={{ base: 5, md: 8 }}
+            py={4}
+            bg="white"
+          >
+            <Button variant="ghost" onClick={() => setSystemAuditOpen(false)}>
+              Close
+            </Button>
+            <Button
+              colorScheme="blue"
+              leftIcon={<Icon as={FiDownload} />}
+              onClick={downloadSystemAudit}
+              isDisabled={!systemAudit}
+            >
+              Download Markdown
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(passwordRecoveryTarget)}
+        onClose={closePasswordRecoveryDialog}
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            {temporaryPassword
+              ? "Temporary password generated"
+              : "Confirm password recovery"}
+          </ModalHeader>
+          <ModalCloseButton isDisabled={temporaryPasswordLoading} />
+          <ModalBody>
+            {passwordRecoveryTarget ? (
+              <>
+                <Text>
+                  User:{" "}
+                  <Text as="span" fontWeight="700">
+                    {passwordRecoveryTarget.name || "Unnamed user"}
+                  </Text>
+                </Text>
+                <Text color="gray.600" mt={1}>
+                  {passwordRecoveryTarget.email}
+                </Text>
+              </>
+            ) : null}
+            {temporaryPassword ? (
+              <>
+                {temporaryPasswordAuditWarning ? (
+                  <Alert status="warning" borderRadius="lg" mt={4}>
+                    <AlertIcon />
+                    <AlertDescription fontSize="sm">
+                      {temporaryPasswordAuditWarning}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+                <Alert status="warning" borderRadius="lg" mt={4}>
+                  <AlertIcon />
+                  <AlertDescription fontSize="sm">
+                    Copy or share this temporary password now. It cannot be
+                    retrieved from this screen after closing this dialog.
+                  </AlertDescription>
+                </Alert>
+                <Code
+                  display="block"
+                  mt={4}
+                  p={4}
+                  fontSize="lg"
+                  userSelect="all"
+                  wordBreak="break-all"
+                  aria-label="One-time temporary password"
+                >
+                  {temporaryPassword}
+                </Code>
+                <Text fontSize="sm" color="gray.600" mt={3}>
+                  The user must choose a new password at the next sign-in.
+                </Text>
+              </>
+            ) : (
+              <Text mt={4}>
+                This immediately replaces the user&apos;s current password.
+                The generated password will be shown only once, and the user
+                will be required to change it at the next sign-in.
+              </Text>
+            )}
+            {temporaryPasswordError ? (
+              <Alert status="error" borderRadius="lg" mt={4}>
+                <AlertIcon />
+                <AlertDescription>{temporaryPasswordError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </ModalBody>
+          <ModalFooter gap={2}>
+            <Button
+              variant="ghost"
+              onClick={closePasswordRecoveryDialog}
+              isDisabled={temporaryPasswordLoading}
+            >
+              {temporaryPassword ? "Close" : "Cancel"}
+            </Button>
+            {!temporaryPassword ? (
+              <Button
+                colorScheme="orange"
+                leftIcon={<Icon as={FiKey} />}
+                onClick={issueTemporaryPassword}
+                isLoading={temporaryPasswordLoading}
+              >
+                Generate temporary password
+              </Button>
+            ) : null}
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 };

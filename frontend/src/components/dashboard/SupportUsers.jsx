@@ -46,7 +46,11 @@ import {
 } from "react-icons/fi";
 import PageHeader from "./PageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
-import { getCurrentUserIds, isCurrentUserId } from "../../utils/currentUserIdentity";
+import {
+  getCurrentUserIds,
+  isCurrentUserId,
+} from "../../utils/asyncStorage/currentUserIdentity";
+import { PresenceStatus } from "../../presence/PresenceIndicator";
 
 const API_URL = (
   process.env.REACT_APP_API_URL ||
@@ -100,31 +104,36 @@ const SupportUsers = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [form, setForm] = useState(emptyForm);
 
-  const loadUsers = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    setError("");
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        throw new Error("Your support session has expired. Please sign in again.");
+  const loadUsers = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) setRefreshing(true);
+      setError("");
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          throw new Error(
+            "Your support session has expired. Please sign in again.",
+          );
+        }
+        const response = await fetch(`${API_URL}/admin/support-users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const result = await response.json();
+        if (!response.ok || !Array.isArray(result)) {
+          throw new Error(result?.error || "Unable to load support users.");
+        }
+        setUsers(result);
+        writeMessageCache(cacheKey, result);
+      } catch (requestError) {
+        console.error("Could not load platform support users:", requestError);
+        setError(requestError?.message || "Unable to load support users.");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-      const response = await fetch(`${API_URL}/admin/support-users`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const result = await response.json();
-      if (!response.ok || !Array.isArray(result)) {
-        throw new Error(result?.error || "Unable to load support users.");
-      }
-      setUsers(result);
-      writeMessageCache(cacheKey, result);
-    } catch (requestError) {
-      console.error("Could not load platform support users:", requestError);
-      setError(requestError?.message || "Unable to load support users.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [cacheKey]);
+    },
+    [cacheKey],
+  );
 
   useEffect(() => {
     void loadUsers();
@@ -187,7 +196,9 @@ const SupportUsers = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        throw new Error("Your support session has expired. Please sign in again.");
+        throw new Error(
+          "Your support session has expired. Please sign in again.",
+        );
       }
       const creating = !editingUser;
       const path = creating
@@ -221,7 +232,10 @@ const SupportUsers = () => {
             "Only super admins can make support-user changes.",
         };
         throw new Error(
-          errors[result?.error] || result?.message || result?.error || "Unable to save support user.",
+          errors[result?.error] ||
+            result?.message ||
+            result?.error ||
+            "Unable to save support user.",
         );
       }
       setSuccess(creating ? "Support user created." : "Support user updated.");
@@ -235,7 +249,7 @@ const SupportUsers = () => {
   };
 
   return (
-    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 6, xl: 8 }}>
+    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
       <PageHeader
         eyebrow="PLATFORM ACCESS"
         title="Support users"
@@ -281,7 +295,8 @@ const SupportUsers = () => {
         <Alert status="info" borderRadius="xl" mb={4}>
           <AlertIcon />
           <AlertDescription>
-            You can view support users. Only super admins can add or edit accounts.
+            You can view support users. Only super admins can add or edit
+            accounts.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -308,8 +323,7 @@ const SupportUsers = () => {
           py={2}
           borderRadius="full"
         >
-          {filteredUsers.length}{" "}
-          {filteredUsers.length === 1 ? "user" : "users"}
+          {filteredUsers.length} {filteredUsers.length === 1 ? "user" : "users"}
         </Badge>
       </Flex>
 
@@ -380,13 +394,10 @@ const SupportUsers = () => {
                               <Badge colorScheme="blue">You</Badge>
                             ) : null}
                           </HStack>
-                          <Text
-                            color="gray.500"
-                            fontSize="sm"
-                            noOfLines={1}
-                          >
+                          <Text color="gray.500" fontSize="sm" noOfLines={1}>
                             {user.email || "No email provided"}
                           </Text>
+                          <PresenceStatus userId={user.id} />
                         </Box>
                       </HStack>
                     </Td>
@@ -472,7 +483,9 @@ const SupportUsers = () => {
           <CardBody textAlign="center" py={12}>
             <Icon as={FiShield} boxSize={8} color="gray.400" />
             <Text color="gray.600" mt={3}>
-              {search ? "No support users match your search." : "No support users have been added."}
+              {search
+                ? "No support users match your search."
+                : "No support users have been added."}
             </Text>
           </CardBody>
         </Card>
@@ -481,7 +494,9 @@ const SupportUsers = () => {
       <Modal isOpen={isOpen} onClose={closeModal} isCentered>
         <ModalOverlay />
         <ModalContent as="form" onSubmit={saveUser}>
-          <ModalHeader>{editingUser ? "Edit support user" : "Add support user"}</ModalHeader>
+          <ModalHeader>
+            {editingUser ? "Edit support user" : "Add support user"}
+          </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4}>
@@ -490,7 +505,10 @@ const SupportUsers = () => {
                 <Input
                   value={form.name}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, name: event.target.value }))
+                    setForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
                   }
                   maxLength={120}
                 />
@@ -501,7 +519,10 @@ const SupportUsers = () => {
                   type="email"
                   value={form.email}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, email: event.target.value }))
+                    setForm((current) => ({
+                      ...current,
+                      email: event.target.value,
+                    }))
                   }
                   maxLength={254}
                 />
@@ -511,18 +532,25 @@ const SupportUsers = () => {
                 <Select
                   value={form.admin_role}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, admin_role: event.target.value }))
+                    setForm((current) => ({
+                      ...current,
+                      admin_role: event.target.value,
+                    }))
                   }
                 >
                   {Object.entries(roleLabels).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
                   ))}
                 </Select>
               </FormControl>
               {!editingUser || form.temporary_password ? (
                 <FormControl isRequired={!editingUser}>
                   <FormLabel>
-                    {editingUser ? "Reset temporary password" : "Temporary password"}
+                    {editingUser
+                      ? "Reset temporary password"
+                      : "Temporary password"}
                   </FormLabel>
                   <Input
                     type="password"

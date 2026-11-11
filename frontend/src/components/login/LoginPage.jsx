@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from "lucide-react";
 import mainLogo from "../../Asserts/images/mainLogo.png";
+import { supabaseClient } from "../../supabaseClient/supabase.config";
 import "./LoginPage.css";
 
 const API_URL = (
@@ -64,6 +65,18 @@ const LoginPage = () => {
                 return;
             }
 
+            if (
+                !result.supabaseSession?.access_token ||
+                !result.supabaseSession?.refresh_token
+            ) {
+                throw new Error("The server returned an invalid Supabase session.");
+            }
+            const { error: sessionError } = await supabaseClient.auth.setSession({
+                access_token: result.supabaseSession.access_token,
+                refresh_token: result.supabaseSession.refresh_token,
+            });
+            if (sessionError) throw sessionError;
+
             localStorage.setItem("token", result.token);
             localStorage.setItem(
                 "user",
@@ -77,6 +90,7 @@ const LoginPage = () => {
                         result.user.admin_profile?.admin_role || "support",
                 }),
             );
+            window.dispatchEvent(new Event("support-auth-changed"));
 
             setSuccess(true);
             setMessage("Login successful!");
