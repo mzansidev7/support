@@ -42,6 +42,7 @@ const items = [
     { label: "Drivers", path: "/drivers", icon: FiUsers },
     { label: "Users", path: "/users", icon: FiUsers },
     { label: "Support Users", path: "/support-users", icon: FiShield },
+    { label: "Government Users", path: "/government-users", icon: FiShield },
     { label: "Messages", path: "/messages", icon: FiMessageCircle },
     { label: "Trips", path: "/trips", icon: FiMap },
     { label: "Vehicles", path: "/vehicles", icon: FiTruck },
@@ -90,6 +91,13 @@ const SidebarContent = ({ onClose }) => {
             }
             setUnreadNotificationCount(
                 Math.max(0, Number(result?.unread_count) || 0),
+            );
+            window.dispatchEvent(
+                new CustomEvent("support-unread-notifications-updated", {
+                    detail: {
+                        count: Math.max(0, Number(result?.unread_count) || 0),
+                    },
+                }),
             );
         } catch (error) {
             console.error("Could not refresh unread notification count:", error);

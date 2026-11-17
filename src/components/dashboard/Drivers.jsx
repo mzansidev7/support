@@ -45,7 +45,7 @@ import {
 } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/Drivers.css";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
 import { PresenceStatus } from "../../presence/PresenceIndicator";
 import { API_URL } from "../../Urls";
@@ -351,8 +351,8 @@ const Drivers = () => {
   ).length;
 
   return (
-    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
-      <PageHeader
+    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 5 }}>
+      <SupportPageHeader
         eyebrow="FLEET OPERATIONS"
         title="Drivers Monitoring"
         description="Monitor driver activity, status, and assignments — and communicate with drivers directly."
@@ -452,7 +452,9 @@ const Drivers = () => {
                         <Text fontSize="sm" color="gray.500" noOfLines={1}>
                           {driver.users?.email || "No email on file"}
                         </Text>
-                        <PresenceStatus userId={driver.users?.id || driver.user_id} />
+                        <PresenceStatus
+                          userId={driver.users?.id || driver.user_id}
+                        />
                       </Box>
                     </HStack>
                     <Badge

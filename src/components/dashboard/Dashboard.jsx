@@ -34,7 +34,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import { API_URL } from "../../Urls";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 
 const CACHE_PREFIX = "support-dashboard-cache";
 const REFRESH_INTERVAL_MS = 30_000;
@@ -241,8 +241,8 @@ const Dashboard = () => {
     metrics.openTickets > 0 || metrics.openIncidents > 0 || offlineVehicles > 0;
 
   return (
-    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
-      <PageHeader
+    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 5 }}>
+      <SupportPageHeader
         eyebrow="PLATFORM OPERATIONS"
         title="Support dashboard"
         description={`Welcome, ${supportName}`}

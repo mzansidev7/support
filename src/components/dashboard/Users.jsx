@@ -60,7 +60,7 @@ import {
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../../Urls";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
 import {
   getCurrentUserIds,
@@ -646,8 +646,8 @@ const Users = () => {
   };
 
   return (
-    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
-      <PageHeader
+    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 5 }}>
+      <SupportPageHeader
         eyebrow="PLATFORM DIRECTORY"
         title="Users"
         description="Browse user accounts, inspect their profile details, and message people directly."

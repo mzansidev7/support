@@ -1,23 +1,27 @@
 .messages-inbox-page {
   min-width: 0;
+  min-height: 0;
   display: flex;
-  height: 100vh;
-  height: 100dvh;
+  height: calc(100vh - 64px);
+  height: calc(100dvh - 64px);
   flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
   padding: 22px 24px 24px;
 }
-.messages-inbox-page > header {
+.messages-inbox-page > .support-page-heading {
   flex: 0 0 auto;
   margin-bottom: 14px !important;
 }
 .messages-inbox-layout {
   display: grid;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   grid-template-rows: minmax(0, 1fr);
-  grid-template-columns: minmax(245px, 0.82fr) minmax(360px, 1.65fr) minmax(245px, 0.9fr);
+  grid-template-columns: minmax(245px, 0.82fr) minmax(360px, 1.65fr) minmax(
+      245px,
+      0.9fr
+    );
   overflow: hidden;
   border: 1px solid #dce4eb;
   border-radius: 10px;
@@ -1012,8 +1016,9 @@
 
 @media (max-width: 680px) {
   .messages-inbox-page {
-    height: calc(100vh - 56px);
-    height: calc(100dvh - 56px);
+    height: calc(100vh - 64px);
+    height: calc(100dvh - 64px);
+    min-height: 0;
     padding: 14px 12px 12px;
   }
   .messages-inbox-layout {

@@ -73,7 +73,7 @@ import {
   isCurrentUserId,
 } from "../../utils/asyncStorage/currentUserIdentity";
 import "../../styles/Settings.css";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 
 const ticketLevels = [
   ["low", "Low"],
@@ -284,7 +284,13 @@ function AuditReportContent({ report }) {
         if (block.type === "heading") {
           const headingProps =
             block.level === 2
-              ? { size: "md", mt: 2, pb: 2, borderBottom: "1px solid", borderColor: "gray.100" }
+              ? {
+                  size: "md",
+                  mt: 2,
+                  pb: 2,
+                  borderBottom: "1px solid",
+                  borderColor: "gray.100",
+                }
               : { size: "sm", mt: 1 };
           return (
             <Heading
@@ -324,7 +330,10 @@ function AuditReportContent({ report }) {
                         minW="120px"
                         py={3}
                       >
-                        {renderAuditInline(cell, `${block.key}-head-${cellIndex}`)}
+                        {renderAuditInline(
+                          cell,
+                          `${block.key}-head-${cellIndex}`,
+                        )}
                       </Th>
                     ))}
                   </Tr>
@@ -393,12 +402,7 @@ function AuditReportContent({ report }) {
         }
 
         return (
-          <Text
-            key={block.key}
-            color="gray.700"
-            fontSize="sm"
-            lineHeight="1.8"
-          >
+          <Text key={block.key} color="gray.700" fontSize="sm" lineHeight="1.8">
             {renderAuditInline(block.text, block.key)}
           </Text>
         );
@@ -517,6 +521,8 @@ function RoleCard({ permissions }) {
 const Settings = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const showingPasswordRecovery =
+    searchParams.get("passwordRecovery") === "1";
   const user = useMemo(readUser, []);
   const currentUserIds = useMemo(getCurrentUserIds, []);
   const isSuperAdmin = user?.admin_profile?.admin_role === "super_admin";
@@ -544,7 +550,6 @@ const Settings = () => {
   const [systemAuditLoading, setSystemAuditLoading] = useState(false);
   const [systemAuditError, setSystemAuditError] = useState("");
   const [systemAuditOpen, setSystemAuditOpen] = useState(false);
-  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
   const [passwordRecoveryUsers, setPasswordRecoveryUsers] = useState([]);
   const [passwordRecoveryTotal, setPasswordRecoveryTotal] = useState(0);
   const [passwordRecoveryPage, setPasswordRecoveryPage] = useState(1);
@@ -552,8 +557,7 @@ const Settings = () => {
     useState("");
   const [passwordRecoverySearch, setPasswordRecoverySearch] = useState("");
   const [passwordRecoveryRole, setPasswordRecoveryRole] = useState("all");
-  const [passwordRecoveryLoading, setPasswordRecoveryLoading] =
-    useState(false);
+  const [passwordRecoveryLoading, setPasswordRecoveryLoading] = useState(false);
   const [passwordRecoveryError, setPasswordRecoveryError] = useState("");
   const [passwordRecoveryTarget, setPasswordRecoveryTarget] = useState(null);
   const [temporaryPassword, setTemporaryPassword] = useState("");
@@ -580,7 +584,9 @@ const Settings = () => {
       (closest, entry) => {
         const entryTime = new Date(entry.created_at || 0).getTime();
         const distance = Math.abs(entryTime - requestedTime);
-        return distance < closest.distance ? { id: entry.id, distance } : closest;
+        return distance < closest.distance
+          ? { id: entry.id, distance }
+          : closest;
       },
       { id: null, distance: Number.POSITIVE_INFINITY },
     );
@@ -663,34 +669,37 @@ const Settings = () => {
     }
   }, [isSuperAdmin, requestLogFilter, requestLogSearchId]);
 
-  const loadPasswordRecoveryUsers = async (
-    page = 1,
-    search = passwordRecoverySearch,
-    role = passwordRecoveryRole,
-  ) => {
-    if (!isSuperAdmin) return;
-    setPasswordRecoveryLoading(true);
-    setPasswordRecoveryError("");
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-      });
-      if (search) params.set("search", search);
-      if (role !== "all") params.set("role", role);
-      const result = await apiRequest(
-        `/admin/password-recovery/users?${params.toString()}`,
-      );
-      setPasswordRecoveryUsers(result.users || []);
-      setPasswordRecoveryTotal(result.total || 0);
-      setPasswordRecoveryPage(result.page || page);
-    } catch (requestError) {
-      setPasswordRecoveryError(
-        requestError.message || "Unable to load users for password recovery.",
-      );
-    } finally {
-      setPasswordRecoveryLoading(false);
-    }
-  };
+  const loadPasswordRecoveryUsers = useCallback(
+    async (
+      page = 1,
+      search = "",
+      role = "all",
+    ) => {
+      if (!isSuperAdmin) return;
+      setPasswordRecoveryLoading(true);
+      setPasswordRecoveryError("");
+      try {
+        const params = new URLSearchParams({
+          page: String(page),
+        });
+        if (search) params.set("search", search);
+        if (role !== "all") params.set("role", role);
+        const result = await apiRequest(
+          `/admin/password-recovery/users?${params.toString()}`,
+        );
+        setPasswordRecoveryUsers(result.users || []);
+        setPasswordRecoveryTotal(result.total || 0);
+        setPasswordRecoveryPage(result.page || page);
+      } catch (requestError) {
+        setPasswordRecoveryError(
+          requestError.message || "Unable to load users for password recovery.",
+        );
+      } finally {
+        setPasswordRecoveryLoading(false);
+      }
+    },
+    [isSuperAdmin],
+  );
 
   const submitPasswordRecoverySearch = (event) => {
     event.preventDefault();
@@ -785,6 +794,11 @@ const Settings = () => {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (!showingPasswordRecovery || !isSuperAdmin) return;
+    void loadPasswordRecoveryUsers(1, "", "all");
+  }, [isSuperAdmin, loadPasswordRecoveryUsers, showingPasswordRecovery]);
 
   useEffect(() => {
     if (searchParams.get("configurationHistory") === "1") {
@@ -953,25 +967,36 @@ const Settings = () => {
         : "red";
 
   return (
-    <Box className="support-settings-page">
-      <PageHeader
+    <Box
+      minH="100vh"
+      bg="gray.50"
+      p={{ base: 4, md: 5 }}
+      className="support-settings-page"
+    >
+      <SupportPageHeader
         eyebrow="SYSTEM ADMINISTRATION"
         title={
           showingRequestLogs
             ? "Failed system requests"
             : showingConfigurationHistory
               ? "Configuration history"
-              : "Support Control Center"
+              : showingPasswordRecovery
+                ? "Password recovery"
+                : "Support Control Center"
         }
         description={
           showingRequestLogs
             ? "Review recent API requests that returned an error."
             : showingConfigurationHistory
               ? "Review recent changes made to Support Control Center settings."
-              : "Configure service targets, escalation behavior, and operational alerts."
+              : showingPasswordRecovery
+                ? "Help verified users regain access with a one-time temporary password."
+                : "Configure service targets, escalation behavior, and operational alerts."
         }
         meta={
-          !showingRequestLogs && !showingConfigurationHistory ? (
+          !showingRequestLogs &&
+          !showingConfigurationHistory &&
+          !showingPasswordRecovery ? (
             <Text className="settings-updated">
               <Icon as={FiActivity} /> Last saved: {formatDate(updatedAt)}
             </Text>
@@ -983,67 +1008,90 @@ const Settings = () => {
               variant="outline"
               leftIcon={<Icon as={FiRefreshCw} />}
               onClick={
-                showingRequestLogs ? loadRequestLogs : loadSettings
+                showingRequestLogs
+                  ? loadRequestLogs
+                  : showingPasswordRecovery
+                    ? () =>
+                        void loadPasswordRecoveryUsers(
+                          1,
+                          passwordRecoverySearch,
+                          passwordRecoveryRole,
+                        )
+                    : loadSettings
               }
-              isLoading={showingRequestLogs ? requestLogsLoading : loading}
+              isLoading={
+                showingRequestLogs
+                  ? requestLogsLoading
+                  : showingPasswordRecovery
+                    ? passwordRecoveryLoading
+                    : loading
+              }
             >
               Refresh
             </Button>
             {!showingRequestLogs &&
             !showingConfigurationHistory &&
+            !showingPasswordRecovery &&
             isSuperAdmin ? (
               <Button
-                variant={showPasswordRecovery ? "solid" : "outline"}
+                variant="outline"
                 colorScheme="orange"
                 leftIcon={<Icon as={FiKey} />}
                 onClick={() => {
-                  const nextOpen = !showPasswordRecovery;
-                  setShowPasswordRecovery(nextOpen);
-                  if (nextOpen) {
-                    setPasswordRecoverySearch("");
-                    setPasswordRecoverySearchInput("");
-                    void loadPasswordRecoveryUsers(1, "");
-                  }
+                  setPasswordRecoverySearch("");
+                  setPasswordRecoverySearchInput("");
+                  setPasswordRecoveryRole("all");
+                  navigate("/settings?passwordRecovery=1");
                 }}
               >
-                {showPasswordRecovery ? "Hide password recovery" : "Password recovery"}
+                Password recovery
               </Button>
             ) : null}
             {isSuperAdmin ? (
               <>
-                <Button
-                  variant={showingRequestLogs ? "solid" : "outline"}
-                  colorScheme={showingRequestLogs ? "red" : "gray"}
-                  leftIcon={<Icon as={FiAlertTriangle} />}
-                  onClick={() => {
-                    setShowingRequestLogs(true);
-                    setShowingConfigurationHistory(false);
-                  }}
-                >
-                  Failed system requests
-                </Button>
-                <Button
-                  variant={showingConfigurationHistory ? "solid" : "outline"}
-                  colorScheme={showingConfigurationHistory ? "blue" : "gray"}
-                  leftIcon={<Icon as={FiSettings} />}
-                  onClick={() => {
-                    setShowingRequestLogs(false);
-                    setShowingConfigurationHistory(true);
-                    setSearchParams(
-                      (current) => {
-                        const next = new URLSearchParams(current);
-                        next.delete("configurationHistory");
-                        next.delete("historyId");
-                        next.delete("historyAt");
-                        return next;
-                      },
-                      { replace: true },
-                    );
-                  }}
-                >
-                  Configuration history
-                </Button>
-                {(showingRequestLogs || showingConfigurationHistory) && (
+                {!showingPasswordRecovery ? (
+                  <>
+                    <Button
+                      variant={showingRequestLogs ? "solid" : "outline"}
+                      colorScheme={showingRequestLogs ? "red" : "gray"}
+                      leftIcon={<Icon as={FiAlertTriangle} />}
+                      onClick={() => {
+                        setShowingRequestLogs(true);
+                        setShowingConfigurationHistory(false);
+                      }}
+                    >
+                      Failed system requests
+                    </Button>
+                    <Button
+                      variant={
+                        showingConfigurationHistory ? "solid" : "outline"
+                      }
+                      colorScheme={
+                        showingConfigurationHistory ? "blue" : "gray"
+                      }
+                      leftIcon={<Icon as={FiSettings} />}
+                      onClick={() => {
+                        setShowingRequestLogs(false);
+                        setShowingConfigurationHistory(true);
+                        setSearchParams(
+                          (current) => {
+                            const next = new URLSearchParams(current);
+                            next.delete("configurationHistory");
+                            next.delete("historyId");
+                            next.delete("historyAt");
+                            return next;
+                          },
+                          { replace: true },
+                        );
+                      }}
+                    >
+                      Configuration history
+                    </Button>
+                  </>
+                ) : null}
+                {(showingRequestLogs ||
+                  showingConfigurationHistory ||
+                  showingPasswordRecovery) && (
                   <Button
                     variant="outline"
                     leftIcon={<Icon as={FiArrowLeft} />}
@@ -1053,6 +1101,7 @@ const Settings = () => {
                       setSearchParams(
                         (current) => {
                           const next = new URLSearchParams(current);
+                          next.delete("passwordRecovery");
                           next.delete("configurationHistory");
                           next.delete("historyId");
                           next.delete("historyAt");
@@ -1069,6 +1118,7 @@ const Settings = () => {
             ) : null}
             {!showingRequestLogs &&
             !showingConfigurationHistory &&
+            !showingPasswordRecovery &&
             isSuperAdmin ? (
               <>
                 <Button
@@ -1094,68 +1144,73 @@ const Settings = () => {
 
       {!showingRequestLogs && !showingConfigurationHistory ? (
         <>
-          {error ? (
-            <Alert status="error" borderRadius="xl" mb={5}>
-              <AlertIcon />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          {success ? (
-            <Alert status="success" borderRadius="xl" mb={5}>
-              <AlertIcon />
-              <AlertDescription>{success}</AlertDescription>
-            </Alert>
-          ) : null}
-          {!isSuperAdmin ? (
-            <Alert status="info" borderRadius="xl" mb={5}>
-              <AlertIcon />
-              <AlertDescription>
-                Settings are view-only. Only a super admin can change system
-                controls.
-              </AlertDescription>
-            </Alert>
+          {!showingPasswordRecovery ? (
+            <>
+              {error ? (
+                <Alert status="error" borderRadius="xl" mb={5}>
+                  <AlertIcon />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : null}
+              {success ? (
+                <Alert status="success" borderRadius="xl" mb={5}>
+                  <AlertIcon />
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              ) : null}
+              {!isSuperAdmin ? (
+                <Alert status="info" borderRadius="xl" mb={5}>
+                  <AlertIcon />
+                  <AlertDescription>
+                    Settings are view-only. Only a super admin can change
+                    system controls.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              {isSuperAdmin ? (
+                <Card className="control-card" mb={5}>
+                  <CardBody>
+                    <Flex
+                      align={{ base: "stretch", md: "center" }}
+                      justify="space-between"
+                      gap={4}
+                      direction={{ base: "column", md: "row" }}
+                    >
+                      <Box>
+                        <HStack spacing={2}>
+                          <Icon as={FiFileText} color="blue.500" />
+                          <Heading size="sm">System audit</Heading>
+                        </HStack>
+                        <Text className="control-description">
+                          Review the complete Track My Kid system audit,
+                          including feature status, evidence, risks, and
+                          remediation notes.
+                        </Text>
+                      </Box>
+                      <Button
+                        colorScheme="blue"
+                        variant="outline"
+                        leftIcon={<Icon as={FiFileText} />}
+                        onClick={openSystemAudit}
+                        isLoading={systemAuditLoading}
+                      >
+                        View system audit
+                      </Button>
+                    </Flex>
+                    {systemAuditError ? (
+                      <Alert status="error" borderRadius="lg" mt={4}>
+                        <AlertIcon />
+                        <AlertDescription>{systemAuditError}</AlertDescription>
+                      </Alert>
+                    ) : null}
+                  </CardBody>
+                </Card>
+              ) : null}
+            </>
           ) : null}
 
-          {isSuperAdmin ? (
-            <Card className="control-card" mb={5}>
-              <CardBody>
-                <Flex
-                  align={{ base: "stretch", md: "center" }}
-                  justify="space-between"
-                  gap={4}
-                  direction={{ base: "column", md: "row" }}
-                >
-                  <Box>
-                    <HStack spacing={2}>
-                      <Icon as={FiFileText} color="blue.500" />
-                      <Heading size="sm">System audit</Heading>
-                    </HStack>
-                    <Text className="control-description">
-                      Review the complete Track My Kid system audit, including
-                      feature status, evidence, risks, and remediation notes.
-                    </Text>
-                  </Box>
-                  <Button
-                    colorScheme="blue"
-                    variant="outline"
-                    leftIcon={<Icon as={FiFileText} />}
-                    onClick={openSystemAudit}
-                    isLoading={systemAuditLoading}
-                  >
-                    View system audit
-                  </Button>
-                </Flex>
-                {systemAuditError ? (
-                  <Alert status="error" borderRadius="lg" mt={4}>
-                    <AlertIcon />
-                    <AlertDescription>{systemAuditError}</AlertDescription>
-                  </Alert>
-                ) : null}
-              </CardBody>
-            </Card>
-          ) : null}
-
-          {showPasswordRecovery && isSuperAdmin ? (
+          {showingPasswordRecovery && isSuperAdmin ? (
             <Card className="control-card" mb={5}>
               <CardBody>
                 <Flex
@@ -1285,12 +1340,13 @@ const Settings = () => {
                           size="sm"
                           variant="outline"
                           isDisabled={
-                            passwordRecoveryPage <= 1 ||
-                            passwordRecoveryLoading
+                            passwordRecoveryPage <= 1 || passwordRecoveryLoading
                           }
                           onClick={() =>
                             void loadPasswordRecoveryUsers(
                               passwordRecoveryPage - 1,
+                              passwordRecoverySearch,
+                              passwordRecoveryRole,
                             )
                           }
                         >
@@ -1298,10 +1354,7 @@ const Settings = () => {
                         </Button>
                         <Text fontSize="sm">
                           Page {passwordRecoveryPage} of{" "}
-                          {Math.max(
-                            1,
-                            Math.ceil(passwordRecoveryTotal / 100),
-                          )}
+                          {Math.max(1, Math.ceil(passwordRecoveryTotal / 100))}
                         </Text>
                         <Button
                           size="sm"
@@ -1314,6 +1367,8 @@ const Settings = () => {
                           onClick={() =>
                             void loadPasswordRecoveryUsers(
                               passwordRecoveryPage + 1,
+                              passwordRecoverySearch,
+                              passwordRecoveryRole,
                             )
                           }
                         >
@@ -1331,7 +1386,9 @@ const Settings = () => {
             </Card>
           ) : null}
 
-          <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={5} mb={5}>
+          {!showingPasswordRecovery ? (
+            <>
+            <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={5} mb={5}>
             <SlaCard
               title="Ticket service targets"
               description="Set first-response and resolution targets for each ticket priority."
@@ -1350,7 +1407,7 @@ const Settings = () => {
                 updateSla("incidentSlaHours", level, target, value)
               }
             />
-          </SimpleGrid>
+            </SimpleGrid>
 
           <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={5} mb={5}>
             <Card className="control-card">
@@ -1650,6 +1707,8 @@ const Settings = () => {
               </CardBody>
             </Card>
           </SimpleGrid>
+            </>
+          ) : null}
         </>
       ) : null}
 
@@ -1806,7 +1865,9 @@ const Settings = () => {
                                 {entry.method} {entry.path}
                               </Text>
                               <Text fontSize="xs" color="gray.500" mt={1}>
-                                {entry.error_message || entry.error_code || "Request failed"}
+                                {entry.error_message ||
+                                  entry.error_code ||
+                                  "Request failed"}
                               </Text>
                               {entry.error_code && entry.error_message ? (
                                 <Text fontSize="xs" color="gray.400" mt={1}>
@@ -2172,9 +2233,9 @@ const Settings = () => {
               </>
             ) : (
               <Text mt={4}>
-                This immediately replaces the user&apos;s current password.
-                The generated password will be shown only once, and the user
-                will be required to change it at the next sign-in.
+                This immediately replaces the user&apos;s current password. The
+                generated password will be shown only once, and the user will be
+                required to change it at the next sign-in.
               </Text>
             )}
             {temporaryPasswordError ? (

@@ -31,15 +31,9 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import L from "leaflet";
-import {
-  MapContainer,
-  Marker,
-  Popup,
-  TileLayer,
-  useMap,
-} from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 import { apiRequest } from "../../utils/asyncStorage/apiRequest";
 import {
   getTrackingState,
@@ -82,7 +76,8 @@ const getVehicleName = (trip) =>
     .join(" · ");
 
 const getTripName = (trip) =>
-  trip.route?.route_name || (trip.trip_type === "school_trip" ? "School trip" : "Route");
+  trip.route?.route_name ||
+  (trip.trip_type === "school_trip" ? "School trip" : "Route");
 
 const getJourneyLabel = (trip) => {
   if (trip.journey_phase === "at_destination") return "At destination";
@@ -94,7 +89,10 @@ const getJourneyLabel = (trip) => {
 const TrackingMapViewport = ({ trips, selectedTripId }) => {
   const map = useMap();
   const pointKey = trips
-    .map((trip) => `${trip.id}:${trip.location.latitude}:${trip.location.longitude}`)
+    .map(
+      (trip) =>
+        `${trip.id}:${trip.location.latitude}:${trip.location.longitude}`,
+    )
     .join("|");
 
   useEffect(() => {
@@ -102,7 +100,10 @@ const TrackingMapViewport = ({ trips, selectedTripId }) => {
       const selectedTrip = trips.find((trip) => trip.id === selectedTripId);
       if (selectedTrip) {
         map.flyTo(
-          [Number(selectedTrip.location.latitude), Number(selectedTrip.location.longitude)],
+          [
+            Number(selectedTrip.location.latitude),
+            Number(selectedTrip.location.longitude),
+          ],
           Math.max(map.getZoom(), 14),
           { duration: 0.5 },
         );
@@ -112,7 +113,10 @@ const TrackingMapViewport = ({ trips, selectedTripId }) => {
 
     if (trips.length === 1) {
       map.setView(
-        [Number(trips[0].location.latitude), Number(trips[0].location.longitude)],
+        [
+          Number(trips[0].location.latitude),
+          Number(trips[0].location.longitude),
+        ],
         14,
       );
     } else if (trips.length > 1) {
@@ -144,7 +148,9 @@ const LiveMap = () => {
     try {
       const result = await apiRequest("/admin/trips");
       if (!Array.isArray(result)) {
-        throw new Error("The live trip response was not in the expected format.");
+        throw new Error(
+          "The live trip response was not in the expected format.",
+        );
       }
       setTrips(result.filter(isTrackableTrip));
       setLastUpdatedAt(new Date().toISOString());
@@ -159,13 +165,17 @@ const LiveMap = () => {
 
   useEffect(() => {
     void refresh();
-    const interval = setInterval(() => void refresh({ background: true }), REFRESH_INTERVAL_MS);
+    const interval = setInterval(
+      () => void refresh({ background: true }),
+      REFRESH_INTERVAL_MS,
+    );
     return () => clearInterval(interval);
   }, [refresh]);
 
   const now = Date.now();
   const trackableTrips = useMemo(
-    () => trips.map((trip) => ({ ...trip, tracking: getTrackingState(trip, now) })),
+    () =>
+      trips.map((trip) => ({ ...trip, tracking: getTrackingState(trip, now) })),
     [now, trips],
   );
   const liveTrips = trackableTrips.filter(
@@ -196,18 +206,20 @@ const LiveMap = () => {
   const counts = {
     active: trackableTrips.filter((trip) => trip.status === "active").length,
     live: liveTrips.length,
-    stale: trackableTrips.filter((trip) => trip.tracking.state === "stale").length,
-    paused: trackableTrips.filter((trip) => trip.tracking.state === "paused").length,
+    stale: trackableTrips.filter((trip) => trip.tracking.state === "stale")
+      .length,
+    paused: trackableTrips.filter((trip) => trip.tracking.state === "paused")
+      .length,
   };
 
   return (
     <Box
       minH="100vh"
       bg="gray.50"
-      p={{ base: 4, md: 6, xl: 8 }}
+      p={{ base: 4, md: 5 }}
       className="support-live-map-page"
     >
-      <PageHeader
+      <SupportPageHeader
         eyebrow="FLEET OPERATIONS"
         title="Live Vehicle Tracking"
         description="Monitor active route and school-trip vehicles using their latest reported GPS location."
@@ -261,10 +273,30 @@ const LiveMap = () => {
 
       <SimpleGrid columns={{ base: 2, xl: 4 }} spacing={4} mb={5}>
         {[
-          { label: "Active trips", value: counts.active, icon: FiActivity, color: "blue" },
-          { label: "Live GPS", value: counts.live, icon: FiMapPin, color: "green" },
-          { label: "Stale signal", value: counts.stale, icon: FiClock, color: "orange" },
-          { label: "Location paused", value: counts.paused, icon: FiTruck, color: "purple" },
+          {
+            label: "Active trips",
+            value: counts.active,
+            icon: FiActivity,
+            color: "blue",
+          },
+          {
+            label: "Live GPS",
+            value: counts.live,
+            icon: FiMapPin,
+            color: "green",
+          },
+          {
+            label: "Stale signal",
+            value: counts.stale,
+            icon: FiClock,
+            color: "orange",
+          },
+          {
+            label: "Location paused",
+            value: counts.paused,
+            icon: FiTruck,
+            color: "purple",
+          },
         ].map((metric) => (
           <Card
             key={metric.label}
@@ -330,7 +362,11 @@ const LiveMap = () => {
               {liveTrips.length} live
             </Badge>
           </Flex>
-          <Box h={{ base: "380px", md: "540px" }} position="relative" bg="gray.100">
+          <Box
+            h={{ base: "380px", md: "540px" }}
+            position="relative"
+            bg="gray.100"
+          >
             <MapContainer
               center={[-29, 24]}
               zoom={5}
@@ -393,8 +429,8 @@ const LiveMap = () => {
                     No fresh GPS locations
                   </Text>
                   <Text mt={1} color="gray.500" fontSize="sm">
-                    Active trips remain listed with their signal status. A vehicle
-                    appears here once it reports a current location.
+                    Active trips remain listed with their signal status. A
+                    vehicle appears here once it reports a current location.
                   </Text>
                 </Box>
               </Flex>
@@ -443,7 +479,12 @@ const LiveMap = () => {
               overflowY={{ base: "visible", xl: "auto" }}
             >
               {loading && !trackableTrips.length ? (
-                <Flex minH="180px" align="center" justify="center" direction="column">
+                <Flex
+                  minH="180px"
+                  align="center"
+                  justify="center"
+                  direction="column"
+                >
                   <Spinner color="blue.500" />
                   <Text mt={3} color="gray.500" fontSize="sm">
                     Loading vehicle data...
@@ -481,7 +522,10 @@ const LiveMap = () => {
                         if (liveTripIds.has(trip.id)) {
                           document
                             .querySelector(".support-live-map-page")
-                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                            ?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "start",
+                            });
                         }
                       }}
                     >
@@ -498,7 +542,11 @@ const LiveMap = () => {
                           <Icon as={FiTruck} />
                         </Flex>
                         <Box minW={0} flex="1">
-                          <HStack justify="space-between" align="flex-start" gap={2}>
+                          <HStack
+                            justify="space-between"
+                            align="flex-start"
+                            gap={2}
+                          >
                             <Text noOfLines={1} fontSize="sm" fontWeight="700">
                               {getTripName(trip)}
                             </Text>
@@ -510,7 +558,12 @@ const LiveMap = () => {
                               {tracking.label}
                             </Badge>
                           </HStack>
-                          <Text mt={1} noOfLines={1} color="gray.600" fontSize="xs">
+                          <Text
+                            mt={1}
+                            noOfLines={1}
+                            color="gray.600"
+                            fontSize="xs"
+                          >
                             {getVehicleName(trip)}
                           </Text>
                           <HStack mt={2} spacing={1.5} color="gray.500">
@@ -520,13 +573,26 @@ const LiveMap = () => {
                             </Text>
                           </HStack>
                           {trip.school?.name ? (
-                            <Text mt={1} noOfLines={1} color="gray.500" fontSize="xs">
+                            <Text
+                              mt={1}
+                              noOfLines={1}
+                              color="gray.500"
+                              fontSize="xs"
+                            >
                               {trip.school.name} · {getJourneyLabel(trip)}
                             </Text>
                           ) : (
-                            <Text mt={1} noOfLines={1} color="gray.500" fontSize="xs">
-                              {trip.route?.start_location || "Start unavailable"}{" "}
-                              → {trip.route?.end_location || "Destination unavailable"}
+                            <Text
+                              mt={1}
+                              noOfLines={1}
+                              color="gray.500"
+                              fontSize="xs"
+                            >
+                              {trip.route?.start_location ||
+                                "Start unavailable"}{" "}
+                              →{" "}
+                              {trip.route?.end_location ||
+                                "Destination unavailable"}
                             </Text>
                           )}
                           <Text mt={2} color="gray.400" fontSize="xs">
@@ -547,7 +613,9 @@ const LiveMap = () => {
                 <Box px={4} py={10} textAlign="center">
                   <Icon as={FiTruck} color="gray.300" boxSize={7} />
                   <Text mt={2} color="gray.600" fontWeight="600">
-                    {trackableTrips.length ? "No matching vehicles" : "No active trips"}
+                    {trackableTrips.length
+                      ? "No matching vehicles"
+                      : "No active trips"}
                   </Text>
                   <Text mt={1} color="gray.500" fontSize="sm">
                     {trackableTrips.length

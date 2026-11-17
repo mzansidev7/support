@@ -61,7 +61,7 @@ import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import { API_URL } from "../../Urls";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 import { showConfirmationAlert } from "../../utils/sweetAlert.js";
 
 const CACHE_PREFIX = "support-requests-cache";
@@ -963,6 +963,40 @@ const Requests = () => {
     setDetailLoading(true);
     ticketDisclosure.onOpen();
     try {
+      if (
+        !ticket.assigned_to &&
+        canReplyToTickets &&
+        ["open", "in_progress"].includes(ticket.status)
+      ) {
+        setPendingAction(`claim:${ticket.id}`);
+        const claimToken = localStorage.getItem("token");
+        const claimResponse = await fetch(
+          `${API_URL}/admin/support-tickets/${ticket.id}/claim`,
+          {
+            method: "POST",
+            headers: {
+              [authHeaderKey]: ["Bearer", claimToken].join(" "),
+            },
+          },
+        );
+        const claimResult = await claimResponse.json();
+        const claimedTicket = claimResponse.ok
+          ? claimResult
+          : claimResponse.status === 409 && claimResult.ticket?.assigned_to
+            ? claimResult.ticket
+            : null;
+        if (!claimedTicket) {
+          throw new Error(
+            claimResult?.error || "Unable to assign this ticket to you.",
+          );
+        }
+        setSelectedTicket(claimedTicket);
+        setTickets((current) =>
+          current.map((item) =>
+            item.id === claimedTicket.id ? { ...item, ...claimedTicket } : item,
+          ),
+        );
+      }
       const token = localStorage.getItem("token");
       const headers = { [authHeaderKey]: `Bearer ${token}` };
       const [replyResponse, auditResponse] = await Promise.all([
@@ -991,6 +1025,7 @@ const Requests = () => {
       console.error("Could not load ticket conversation:", detailError);
       setError(detailError?.message || "Unable to load ticket details.");
     } finally {
+      setPendingAction("");
       setDetailLoading(false);
     }
   };
@@ -1067,13 +1102,55 @@ const Requests = () => {
     try {
       const token = localStorage.getItem("token");
       const headers = { [authHeaderKey]: `Bearer ${token}` };
+      let incidentForDetails = incident;
+      if (
+        !incident.assigned_to &&
+        canReplyToTickets &&
+        ["open", "in_progress"].includes(incident.status)
+      ) {
+        setPendingAction(`claim-incident:${incident.id}`);
+        const claimResponse = await fetch(
+          `${API_URL}/admin/incident-reports/${incident.id}/claim`,
+          {
+            method: "POST",
+            headers,
+          },
+        );
+        const claimResult = await claimResponse.json();
+        const claimedIncident = claimResponse.ok
+          ? claimResult
+          : claimResponse.status === 409 && claimResult.incident
+            ? claimResult.incident
+            : null;
+        if (!claimedIncident) {
+          throw new Error(
+            claimResult?.error || "Unable to assign this incident to you.",
+          );
+        }
+        incidentForDetails = { ...incident, ...claimedIncident };
+        selectedIncidentRef.current = incidentForDetails;
+        setSelectedIncident(incidentForDetails);
+        setIncidents((current) =>
+          current.map((item) =>
+            item.id === incidentForDetails.id
+              ? { ...item, ...incidentForDetails }
+              : item,
+          ),
+        );
+      }
       const [replyResponse, auditResponse] = await Promise.all([
-        fetch(`${API_URL}/admin/incident-reports/${incident.id}/replies`, {
-          headers,
-        }),
-        fetch(`${API_URL}/admin/support-audit/incident_report/${incident.id}`, {
-          headers,
-        }),
+        fetch(
+          `${API_URL}/admin/incident-reports/${incidentForDetails.id}/replies`,
+          {
+            headers,
+          },
+        ),
+        fetch(
+          `${API_URL}/admin/support-audit/incident_report/${incidentForDetails.id}`,
+          {
+            headers,
+          },
+        ),
       ]);
       const [replyResult, auditResult] = await Promise.all([
         replyResponse.json(),
@@ -1092,13 +1169,14 @@ const Requests = () => {
       setReplies(replyResult);
       setIncidentRepliesById((current) => ({
         ...current,
-        [incident.id]: replyResult,
+        [incidentForDetails.id]: replyResult,
       }));
       setAudit(auditResult);
     } catch (detailError) {
       console.error("Could not load incident details:", detailError);
       setError(detailError?.message || "Unable to load incident details.");
     } finally {
+      setPendingAction("");
       setDetailLoading(false);
     }
   };
@@ -1541,7 +1619,9 @@ const Requests = () => {
       setEmergencyConversationMessages(
         readEmergencyConversationCache(entityId) || [],
       );
-      setEmergencyConversationLoading(!readEmergencyConversationCache(entityId));
+      setEmergencyConversationLoading(
+        !readEmergencyConversationCache(entityId),
+      );
       setEmergencyConversationError("");
       emergencyAlertDisclosure.onOpen();
       void (async () => {
@@ -1564,11 +1644,15 @@ const Requests = () => {
               result?.error || "Unable to load the SOS conversation.",
             );
           }
-          const messages = normalizeEmergencyConversationMessages(result.messages);
+          const messages = normalizeEmergencyConversationMessages(
+            result.messages,
+          );
           setEmergencyConversationMessages(messages);
           writeEmergencyConversationCache(entityId, messages);
           setSelectedEmergencyAlert((current) =>
-            current?.id === entityId ? { ...current, ...result.alert } : current,
+            current?.id === entityId
+              ? { ...current, ...result.alert }
+              : current,
           );
           setEmergencyAlerts((current) =>
             current.map((item) =>
@@ -1576,7 +1660,10 @@ const Requests = () => {
             ),
           );
         } catch (requestError) {
-          console.error("Could not open SOS alert from notification:", requestError);
+          console.error(
+            "Could not open SOS alert from notification:",
+            requestError,
+          );
           setEmergencyConversationError(
             requestError?.message || "Unable to load the SOS conversation.",
           );
@@ -1766,6 +1853,12 @@ const Requests = () => {
       kind === "ticket"
         ? ["open", "in_progress", "resolved", "closed"]
         : ["open", "in_progress", "resolved"];
+    const cannotReopen =
+      (kind === "incident" && item.status !== "open") ||
+      (kind === "ticket" && item.assigned_to && item.status !== "open");
+    const visibleStatuses = cannotReopen
+      ? statuses.filter((status) => status !== "open")
+      : statuses;
     const actionKey = `${kind}:${item.id}`;
     return (
       <HStack spacing={2}>
@@ -1780,8 +1873,12 @@ const Requests = () => {
           isDisabled={!canManageRequests || Boolean(pendingAction)}
           bg="white"
         >
-          {statuses.map((status) => (
-            <option key={status} value={status}>
+          {visibleStatuses.map((status) => (
+            <option
+              key={status}
+              value={status}
+              disabled={status === "open" && Boolean(item.assigned_to)}
+            >
               {kind === "incident"
                 ? incidentStatusLabel(status)
                 : prettyLabel(status)}
@@ -1877,9 +1974,7 @@ const Requests = () => {
   );
 
   useEffect(() => {
-    setEmergencyAlertPage((page) =>
-      Math.min(page, emergencyAlertPageCount),
-    );
+    setEmergencyAlertPage((page) => Math.min(page, emergencyAlertPageCount));
   }, [emergencyAlertPageCount]);
 
   const markAllSupportAlertsRead = async () => {
@@ -1938,9 +2033,9 @@ const Requests = () => {
 
   const renderAudit = () => (
     <Box
-      mt={6}
-      p={{ base: 4, md: 5 }}
+      minH="100vh"
       bg="gray.50"
+      p={{ base: 4, md: 5 }}
       borderRadius="xl"
       borderWidth="1px"
       borderColor="gray.200"
@@ -2218,8 +2313,10 @@ const Requests = () => {
                     colorScheme="blue"
                     variant="outline"
                     onClick={() => void openTicket(ticket)}
+                    isLoading={pendingAction === `claim:${ticket.id}`}
+                    isDisabled={Boolean(pendingAction)}
                   >
-                    Details
+                    {ticket.assigned_to ? "View" : "Details"}
                   </Button>
                 </Td>
               </Tr>
@@ -2449,7 +2546,7 @@ const Requests = () => {
                     colorScheme="blue"
                     onClick={() => void openIncident(incident)}
                   >
-                    Details & history
+                    {incident.assigned_to ? "View" : "Details & history"}
                   </Button>
                 </Td>
               </Tr>
@@ -2624,8 +2721,8 @@ const Requests = () => {
     );
 
   return (
-    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 6, xl: 8 }}>
-      <PageHeader
+    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 5 }}>
+      <SupportPageHeader
         eyebrow="PLATFORM OPERATIONS"
         title="Support Requests"
         description="Manage tickets, safety incidents, and school registration reviews"
@@ -3264,11 +3361,10 @@ const Requests = () => {
                         {paginatedEmergencyAlerts.map((alert) => {
                           const appearance = emergencyStatusAppearance(alert);
                           const assigneeName = emergencyAssigneeName(alert);
-                          const isAssignedToCurrentUser =
-                            Boolean(
-                              currentUserId &&
-                                alert.attending_by === currentUserId,
-                            );
+                          const isAssignedToCurrentUser = Boolean(
+                            currentUserId &&
+                            alert.attending_by === currentUserId,
+                          );
                           const coordinates = getAlertCoordinates(alert);
                           return (
                             <Tr
@@ -3321,8 +3417,12 @@ const Requests = () => {
                               <Td minW="175px">
                                 <Text
                                   fontSize="sm"
-                                  fontWeight={alert.attending_by ? "600" : "400"}
-                                  color={alert.attending_by ? "gray.700" : "gray.400"}
+                                  fontWeight={
+                                    alert.attending_by ? "600" : "400"
+                                  }
+                                  color={
+                                    alert.attending_by ? "gray.700" : "gray.400"
+                                  }
                                 >
                                   {assigneeName ||
                                     (alert.attending_by
@@ -3351,7 +3451,9 @@ const Requests = () => {
                                     isAssignedToCurrentUser ? "blue" : "gray"
                                   }
                                   variant={
-                                    isAssignedToCurrentUser ? "solid" : "outline"
+                                    isAssignedToCurrentUser
+                                      ? "solid"
+                                      : "outline"
                                   }
                                   leftIcon={<Icon as={FiMessageCircle} />}
                                   onClick={() => {
@@ -3368,14 +3470,10 @@ const Requests = () => {
                                     emergencyAlertDisclosure.onOpen();
                                   }}
                                 >
-                                  {isAssignedToCurrentUser
-                                    ? alert.status === "resolved"
-                                      ? "View"
-                                      : "Respond"
-                                    : alert.attending_by ||
-                                        alert.status === "resolved"
-                                      ? "View"
-                                      : "Claim"}
+                                  {alert.attending_by ||
+                                  alert.status === "resolved"
+                                    ? "View"
+                                    : "Claim"}
                                 </Button>
                               </Td>
                             </Tr>
@@ -3430,7 +3528,9 @@ const Requests = () => {
                             Math.min(emergencyAlertPageCount, page + 1),
                           )
                         }
-                        isDisabled={emergencyAlertPage >= emergencyAlertPageCount}
+                        isDisabled={
+                          emergencyAlertPage >= emergencyAlertPageCount
+                        }
                       >
                         Next
                       </Button>
@@ -3825,7 +3925,9 @@ const Requests = () => {
                         "Sender details unavailable"}
                     </Text>
                     <Text fontSize="sm" color="gray.500">
-                      {emergencySenderLabel(selectedEmergencyAlert?.users?.role)}
+                      {emergencySenderLabel(
+                        selectedEmergencyAlert?.users?.role,
+                      )}
                     </Text>
                     <Text fontSize="sm" color="gray.500">
                       {selectedEmergencyAlert?.users?.phone ||
@@ -3834,158 +3936,163 @@ const Requests = () => {
                     </Text>
                   </Box>
                 </HStack>
-              <HStack
-                justify="space-between"
-                align={{ base: "stretch", sm: "center" }}
-                flexDirection={{ base: "column", sm: "row" }}
-                p={3}
-                borderRadius="lg"
-                borderWidth="1px"
-                borderColor={`${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.200`}
-                bg={
-                  emergencyStatusAppearance(selectedEmergencyAlert).background
-                }
-              >
-                <Box>
-                  <Text fontSize="sm" fontWeight="700" color="gray.800">
-                    SOS status
-                  </Text>
-                  <Text fontSize="xs" color="gray.600">
-                    {!isSuperAdmin
-                      ? "Only super-admins can change status or assignment."
-                      : emergencyAssigneeName(selectedEmergencyAlert)
-                        ? `Assigned to: ${emergencyAssigneeName(selectedEmergencyAlert)}`
-                        : selectedEmergencyAlert?.attending_by
-                          ? "Assigned support member"
-                          : "Unassigned — opening this alert claims it"}
-                  </Text>
-                </Box>
-                {isSuperAdmin ? (
-                  <VStack
-                    align="stretch"
-                    spacing={2}
-                    minW={{ base: "100%", sm: "230px" }}
-                  >
-                    <Select
-                      size="sm"
-                      value={selectedEmergencyAlert?.status || "open"}
-                      onChange={(event) =>
-                        void updateEmergencyStatus(event.target.value)
-                      }
-                      isDisabled={emergencyStatusUpdating}
-                      aria-label="Update SOS status"
-                      bg="white"
-                    >
-                      <option
-                        value="open"
-                        disabled={selectedEmergencyAlert?.status !== "open"}
-                      >
-                        Waiting for support
-                      </option>
-                      <option value="in_progress">Support is attending</option>
-                      <option value="resolved">Resolved</option>
-                    </Select>
-                    <Select
-                      size="sm"
-                      value={selectedEmergencyAlert?.attending_by || ""}
-                      onChange={(event) =>
-                        void updateEmergencyStatus(
-                          undefined,
-                          event.target.value || null,
-                        )
-                      }
-                      isDisabled={emergencyStatusUpdating}
-                      aria-label="Assign SOS to support"
-                      bg="white"
-                    >
-                      <option
-                        value=""
-                        disabled={selectedEmergencyAlert?.status !== "open"}
-                      >
-                        Unassigned / waiting
-                      </option>
-                      {emergencyAssignees.map((assignee) => (
-                        <option key={assignee.id} value={assignee.id}>
-                          {assignee.name} · {prettyLabel(assignee.role)}
-                        </option>
-                      ))}
-                    </Select>
-                  </VStack>
-                ) : null}
-              </HStack>
-              {selectedEmergencyAlert?.route?.route_name ? (
-                <Text fontSize="sm" color="gray.600">
-                  Route: {selectedEmergencyAlert.route.route_name}
-                </Text>
-              ) : null}
-              {selectedEmergencyAlert?.children ? (
-                <Text fontSize="sm" color="gray.600">
-                  Child:{" "}
-                  {[
-                    selectedEmergencyAlert.children.name,
-                    selectedEmergencyAlert.children.lastname,
-                  ]
-                    .filter(Boolean)
-                    .join(" ") || "Name unavailable"}
-                </Text>
-              ) : null}
-              <Text color="gray.800" whiteSpace="pre-wrap">
-                {selectedEmergencyAlert?.message ||
-                  "No additional emergency details were provided."}
-              </Text>
-              <Text fontSize="sm" color="gray.500">
-                Received {formatDateTime(selectedEmergencyAlert?.created_at)}
-              </Text>
-              {getAlertCoordinates(selectedEmergencyAlert) ? (
-                <>
-                  <Text fontSize="sm" fontWeight="600" color="gray.700">
-                    Coordinates:{" "}
-                    {getAlertCoordinates(selectedEmergencyAlert).join(", ")}
-                  </Text>
-                  <Box
-                    h={{ base: "280px", md: "min(42vh, 520px)" }}
-                    overflow="hidden"
-                    borderRadius="xl"
-                    borderWidth="1px"
-                    borderColor="gray.200"
-                  >
-                    <MapContainer
-                      center={getAlertCoordinates(selectedEmergencyAlert)}
-                      zoom={15}
-                      style={{ width: "100%", height: "100%" }}
-                      scrollWheelZoom
-                    >
-                      <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
-                      <Marker
-                        position={getAlertCoordinates(selectedEmergencyAlert)}
-                        icon={emergencyAlertIcon}
-                      >
-                        <Popup>
-                          <strong>
-                            {selectedEmergencyAlert?.users?.name ||
-                              `${emergencySenderLabel(selectedEmergencyAlert?.users?.role)} SOS`}
-                          </strong>
-                          <br />
-                          {formatDateTime(selectedEmergencyAlert?.created_at)}
-                        </Popup>
-                      </Marker>
-                    </MapContainer>
+                <HStack
+                  justify="space-between"
+                  align={{ base: "stretch", sm: "center" }}
+                  flexDirection={{ base: "column", sm: "row" }}
+                  p={3}
+                  borderRadius="lg"
+                  borderWidth="1px"
+                  borderColor={`${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.200`}
+                  bg={
+                    emergencyStatusAppearance(selectedEmergencyAlert).background
+                  }
+                >
+                  <Box>
+                    <Text fontSize="sm" fontWeight="700" color="gray.800">
+                      SOS status
+                    </Text>
+                    <Text fontSize="xs" color="gray.600">
+                      {!isSuperAdmin
+                        ? "Only super-admins can change status or assignment."
+                        : emergencyAssigneeName(selectedEmergencyAlert)
+                          ? `Assigned to: ${emergencyAssigneeName(selectedEmergencyAlert)}`
+                          : selectedEmergencyAlert?.attending_by
+                            ? "Assigned support member"
+                            : "Unassigned — opening this alert claims it"}
+                    </Text>
                   </Box>
-                </>
-              ) : (
-                <Alert status="warning" borderRadius="lg">
-                  <AlertIcon />
-                  <AlertDescription>
-                    No valid GPS coordinates were attached to this alert.
-                    {selectedEmergencyAlert?.location
-                      ? ` Location: ${selectedEmergencyAlert.location}`
-                      : ""}
-                  </AlertDescription>
-                </Alert>
-              )}
+                  {isSuperAdmin ? (
+                    <VStack
+                      align="stretch"
+                      spacing={2}
+                      minW={{ base: "100%", sm: "230px" }}
+                    >
+                      <Select
+                        size="sm"
+                        value={selectedEmergencyAlert?.status || "open"}
+                        onChange={(event) =>
+                          void updateEmergencyStatus(event.target.value)
+                        }
+                        isDisabled={emergencyStatusUpdating}
+                        aria-label="Update SOS status"
+                        bg="white"
+                      >
+                        <option
+                          value="open"
+                          disabled={
+                            selectedEmergencyAlert?.status !== "open" ||
+                            Boolean(selectedEmergencyAlert?.attending_by)
+                          }
+                        >
+                          Waiting for support
+                        </option>
+                        <option value="in_progress">
+                          Support is attending
+                        </option>
+                        <option value="resolved">Resolved</option>
+                      </Select>
+                      <Select
+                        size="sm"
+                        value={selectedEmergencyAlert?.attending_by || ""}
+                        onChange={(event) =>
+                          void updateEmergencyStatus(
+                            undefined,
+                            event.target.value || null,
+                          )
+                        }
+                        isDisabled={emergencyStatusUpdating}
+                        aria-label="Assign SOS to support"
+                        bg="white"
+                      >
+                        <option
+                          value=""
+                          disabled={selectedEmergencyAlert?.status !== "open"}
+                        >
+                          Unassigned / waiting
+                        </option>
+                        {emergencyAssignees.map((assignee) => (
+                          <option key={assignee.id} value={assignee.id}>
+                            {assignee.name} · {prettyLabel(assignee.role)}
+                          </option>
+                        ))}
+                      </Select>
+                    </VStack>
+                  ) : null}
+                </HStack>
+                {selectedEmergencyAlert?.route?.route_name ? (
+                  <Text fontSize="sm" color="gray.600">
+                    Route: {selectedEmergencyAlert.route.route_name}
+                  </Text>
+                ) : null}
+                {selectedEmergencyAlert?.children ? (
+                  <Text fontSize="sm" color="gray.600">
+                    Child:{" "}
+                    {[
+                      selectedEmergencyAlert.children.name,
+                      selectedEmergencyAlert.children.lastname,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || "Name unavailable"}
+                  </Text>
+                ) : null}
+                <Text color="gray.800" whiteSpace="pre-wrap">
+                  {selectedEmergencyAlert?.message ||
+                    "No additional emergency details were provided."}
+                </Text>
+                <Text fontSize="sm" color="gray.500">
+                  Received {formatDateTime(selectedEmergencyAlert?.created_at)}
+                </Text>
+                {getAlertCoordinates(selectedEmergencyAlert) ? (
+                  <>
+                    <Text fontSize="sm" fontWeight="600" color="gray.700">
+                      Coordinates:{" "}
+                      {getAlertCoordinates(selectedEmergencyAlert).join(", ")}
+                    </Text>
+                    <Box
+                      h={{ base: "280px", md: "min(42vh, 520px)" }}
+                      overflow="hidden"
+                      borderRadius="xl"
+                      borderWidth="1px"
+                      borderColor="gray.200"
+                    >
+                      <MapContainer
+                        center={getAlertCoordinates(selectedEmergencyAlert)}
+                        zoom={15}
+                        style={{ width: "100%", height: "100%" }}
+                        scrollWheelZoom
+                      >
+                        <TileLayer
+                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        />
+                        <Marker
+                          position={getAlertCoordinates(selectedEmergencyAlert)}
+                          icon={emergencyAlertIcon}
+                        >
+                          <Popup>
+                            <strong>
+                              {selectedEmergencyAlert?.users?.name ||
+                                `${emergencySenderLabel(selectedEmergencyAlert?.users?.role)} SOS`}
+                            </strong>
+                            <br />
+                            {formatDateTime(selectedEmergencyAlert?.created_at)}
+                          </Popup>
+                        </Marker>
+                      </MapContainer>
+                    </Box>
+                  </>
+                ) : (
+                  <Alert status="warning" borderRadius="lg">
+                    <AlertIcon />
+                    <AlertDescription>
+                      No valid GPS coordinates were attached to this alert.
+                      {selectedEmergencyAlert?.location
+                        ? ` Location: ${selectedEmergencyAlert.location}`
+                        : ""}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </VStack>
               <VStack
                 align="stretch"
@@ -4017,66 +4124,66 @@ const Requests = () => {
                     borderColor="gray.200"
                     borderRadius="xl"
                   >
-                  {emergencyConversationLoading ? (
-                    <Flex justify="center" py={5}>
-                      <Spinner size="sm" color="red.500" />
-                    </Flex>
-                  ) : emergencyConversationMessages.length ? (
-                    <VStack align="stretch" spacing={3}>
-                      {emergencyConversationMessages.map((item) => {
-                        const isOwn = item.author_user_id === currentUserId;
-                        return (
-                          <Flex
-                            key={item.id}
-                            justify={isOwn ? "flex-end" : "flex-start"}
-                          >
-                            <Box
-                              maxW="85%"
-                              px={3}
-                              py={2}
-                              borderRadius="xl"
-                              bg={isOwn ? "red.600" : "white"}
-                              color={isOwn ? "white" : "gray.800"}
-                              borderWidth="1px"
-                              borderColor={
-                                isOwn
-                                  ? `${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.600`
-                                  : `${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.200`
-                              }
+                    {emergencyConversationLoading ? (
+                      <Flex justify="center" py={5}>
+                        <Spinner size="sm" color="red.500" />
+                      </Flex>
+                    ) : emergencyConversationMessages.length ? (
+                      <VStack align="stretch" spacing={3}>
+                        {emergencyConversationMessages.map((item) => {
+                          const isOwn = item.author_user_id === currentUserId;
+                          return (
+                            <Flex
+                              key={item.id}
+                              justify={isOwn ? "flex-end" : "flex-start"}
                             >
-                              <Text fontSize="xs" fontWeight="700" mb={1}>
-                                {isOwn
-                                  ? "Support"
-                                  : item.users?.name ||
-                                    emergencySenderLabel(item.users?.role)}
-                              </Text>
-                              <Text fontSize="sm" whiteSpace="pre-wrap">
-                                {item.body}
-                              </Text>
-                              <Text
-                                fontSize="xs"
-                                opacity={0.75}
-                                mt={1}
-                                textAlign="right"
+                              <Box
+                                maxW="85%"
+                                px={3}
+                                py={2}
+                                borderRadius="xl"
+                                bg={isOwn ? "red.600" : "white"}
+                                color={isOwn ? "white" : "gray.800"}
+                                borderWidth="1px"
+                                borderColor={
+                                  isOwn
+                                    ? `${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.600`
+                                    : `${emergencyStatusAppearance(selectedEmergencyAlert).scheme}.200`
+                                }
                               >
-                                {formatDateTime(item.created_at)}
-                              </Text>
-                            </Box>
-                          </Flex>
-                        );
-                      })}
-                    </VStack>
-                  ) : (
-                    <Text
-                      color="gray.500"
-                      fontSize="sm"
-                      textAlign="center"
-                      py={5}
-                    >
-                      Send a message to let the sender know support is
-                      attending.
-                    </Text>
-                  )}
+                                <Text fontSize="xs" fontWeight="700" mb={1}>
+                                  {isOwn
+                                    ? "Support"
+                                    : item.users?.name ||
+                                      emergencySenderLabel(item.users?.role)}
+                                </Text>
+                                <Text fontSize="sm" whiteSpace="pre-wrap">
+                                  {item.body}
+                                </Text>
+                                <Text
+                                  fontSize="xs"
+                                  opacity={0.75}
+                                  mt={1}
+                                  textAlign="right"
+                                >
+                                  {formatDateTime(item.created_at)}
+                                </Text>
+                              </Box>
+                            </Flex>
+                          );
+                        })}
+                      </VStack>
+                    ) : (
+                      <Text
+                        color="gray.500"
+                        fontSize="sm"
+                        textAlign="center"
+                        py={5}
+                      >
+                        Send a message to let the sender know support is
+                        attending.
+                      </Text>
+                    )}
                   </Box>
                   {emergencyConversationError ? (
                     <Alert status="error" mt={3} borderRadius="lg">

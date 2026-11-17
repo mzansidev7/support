@@ -47,7 +47,7 @@ import {
 } from "react-icons/fi";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import { API_URL } from "../../Urls";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 
 const CACHE_PREFIX = "support-vehicles-cache";
 const REFRESH_INTERVAL_MS = 30_000;
@@ -89,10 +89,12 @@ const formatStatus = (status) => {
     maintenance: { label: "Maintenance", color: "orange" },
     offline: { label: "Offline", color: "red" },
   };
-  return statusStyle[normalized] || {
-    label: status || "Unknown",
-    color: "gray",
-  };
+  return (
+    statusStyle[normalized] || {
+      label: status || "Unknown",
+      color: "gray",
+    }
+  );
 };
 
 const getVehicleScope = (vehicle) =>
@@ -165,7 +167,9 @@ const Vehicles = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        throw new Error("Your support session has expired. Please sign in again.");
+        throw new Error(
+          "Your support session has expired. Please sign in again.",
+        );
       }
       const response = await fetch(`${API_URL}/admin/vehicles`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -214,9 +218,12 @@ const Vehicles = () => {
         },
         (payload) => {
           if (
-            !["vehicles", "drivers", "route_assignments", "route_children"].includes(
-              payload.new?.resource_type,
-            )
+            ![
+              "vehicles",
+              "drivers",
+              "route_assignments",
+              "route_children",
+            ].includes(payload.new?.resource_type)
           ) {
             return;
           }
@@ -272,7 +279,8 @@ const Vehicles = () => {
       .toLowerCase();
     const matchesQuery = !query || searchable.includes(query);
     const matchesStatus =
-      filter === "All" || vehicle.status?.toLowerCase() === filter.toLowerCase();
+      filter === "All" ||
+      vehicle.status?.toLowerCase() === filter.toLowerCase();
     const matchesScope =
       scopeFilter === "All" ||
       (scopeFilter === "Fleet owner vehicles" && scope === "fleet_owner") ||
@@ -310,19 +318,21 @@ const Vehicles = () => {
     setPage((currentPage) => Math.min(currentPage, pageCount));
   }, [pageCount]);
 
-  const fleetOwners = [...new Map(
-    vehicles
-      .filter((vehicle) => getVehicleScope(vehicle) === "fleet_owner")
-      .map((vehicle) => {
-        const id = String(vehicle.owner?.id || vehicle.owner_id || "");
-        const name =
-          vehicle.owner?.company_name ||
-          vehicle.owner?.users?.name ||
-          "Unknown fleet owner";
-        return [id, { id, name }];
-      })
-      .filter(([id]) => id),
-  ).values()].sort((a, b) => a.name.localeCompare(b.name));
+  const fleetOwners = [
+    ...new Map(
+      vehicles
+        .filter((vehicle) => getVehicleScope(vehicle) === "fleet_owner")
+        .map((vehicle) => {
+          const id = String(vehicle.owner?.id || vehicle.owner_id || "");
+          const name =
+            vehicle.owner?.company_name ||
+            vehicle.owner?.users?.name ||
+            "Unknown fleet owner";
+          return [id, { id, name }];
+        })
+        .filter(([id]) => id),
+    ).values(),
+  ].sort((a, b) => a.name.localeCompare(b.name));
 
   const schoolVehicleCount = vehicles.filter(
     (vehicle) => getVehicleScope(vehicle) === "school",
@@ -358,34 +368,36 @@ const Vehicles = () => {
     : [];
 
   return (
-    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 6, xl: 8 }}>
-      <PageHeader
+    <Box p={{ base: 4, md: 5 }} bg="gray.50">
+      <SupportPageHeader
         eyebrow="PLATFORM OPERATIONS"
         title="Vehicle Monitoring"
         description="Fleet vehicles and assignments from the transport database"
         actions={
           <VStack align="flex-end" spacing={2}>
-          <Button
-            leftIcon={<Icon as={FiRefreshCw} />}
-            variant="outline"
-            colorScheme="blue"
-            onClick={() => void refresh()}
-            isLoading={refreshing}
-            loadingText="Refreshing"
-          >
-            Refresh
-          </Button>
-          <HStack spacing={1.5}>
-            <Box
-              w="7px"
-              h="7px"
-              borderRadius="full"
-              bg={realtimeConnected ? "green.500" : "gray.400"}
-            />
-            <Text color="gray.500" fontSize="xs">
-              {realtimeConnected ? "Live updates connected" : "Syncing every 30s"}
-            </Text>
-          </HStack>
+            <Button
+              leftIcon={<Icon as={FiRefreshCw} />}
+              variant="outline"
+              colorScheme="blue"
+              onClick={() => void refresh()}
+              isLoading={refreshing}
+              loadingText="Refreshing"
+            >
+              Refresh
+            </Button>
+            <HStack spacing={1.5}>
+              <Box
+                w="7px"
+                h="7px"
+                borderRadius="full"
+                bg={realtimeConnected ? "green.500" : "gray.400"}
+              />
+              <Text color="gray.500" fontSize="xs">
+                {realtimeConnected
+                  ? "Live updates connected"
+                  : "Syncing every 30s"}
+              </Text>
+            </HStack>
           </VStack>
         }
       />
@@ -411,7 +423,11 @@ const Vehicles = () => {
 
       <SimpleGrid columns={{ base: 1, sm: 2, xl: 4 }} spacing={3} mb={5}>
         {[
-          { label: "Total vehicles", value: vehicles.length, color: "blue.600" },
+          {
+            label: "Total vehicles",
+            value: vehicles.length,
+            color: "blue.600",
+          },
           { label: "Active", value: activeCount, color: "green.600" },
           {
             label: "Fleet / school",
@@ -424,7 +440,12 @@ const Vehicles = () => {
             color: "orange.600",
           },
         ].map((item) => (
-          <Card key={item.label} borderRadius="xl" border="1px solid" borderColor="gray.200">
+          <Card
+            key={item.label}
+            borderRadius="xl"
+            border="1px solid"
+            borderColor="gray.200"
+          >
             <CardBody py={3}>
               <Text color="gray.600" fontSize="sm">
                 {item.label}
@@ -698,7 +719,9 @@ const Vehicles = () => {
                 size="sm"
                 variant="outline"
                 leftIcon={<Icon as={FiChevronLeft} />}
-                onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+                onClick={() =>
+                  setPage((currentPage) => Math.max(1, currentPage - 1))
+                }
                 isDisabled={page <= 1}
               >
                 Previous
@@ -724,9 +747,7 @@ const Vehicles = () => {
         <Card borderRadius="xl">
           <CardBody py={12} textAlign="center">
             <Heading size="sm" color="gray.700">
-              {vehicles.length
-                ? "No matching vehicles"
-                : "No vehicles found"}
+              {vehicles.length ? "No matching vehicles" : "No vehicles found"}
             </Heading>
             <Text color="gray.500" fontSize="sm" mt={2}>
               {vehicles.length
@@ -781,9 +802,18 @@ const Vehicles = () => {
             <ModalCloseButton color="white" top={5} />
             <ModalBody bg="gray.50" p={{ base: 4, md: 6 }}>
               <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                <Card borderRadius="xl" border="1px solid" borderColor="gray.200">
+                <Card
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                >
                   <CardBody>
-                    <Heading size="xs" color="gray.500" textTransform="uppercase" mb={3}>
+                    <Heading
+                      size="xs"
+                      color="gray.500"
+                      textTransform="uppercase"
+                      mb={3}
+                    >
                       Vehicle information
                     </Heading>
                     <VStack align="stretch" spacing={2}>
@@ -793,13 +823,27 @@ const Vehicles = () => {
                         ["Make", selectedVehicle.make],
                         ["Model", selectedVehicle.model],
                         ["Year", selectedVehicle.year],
-                        ["Colour", selectedVehicle.colour || selectedVehicle.color],
+                        [
+                          "Colour",
+                          selectedVehicle.colour || selectedVehicle.color,
+                        ],
                         ["VIN", selectedVehicle.vin],
-                        ["Passenger capacity", selectedVehicle.capacity || selectedVehicle.passenger_capacity],
+                        [
+                          "Passenger capacity",
+                          selectedVehicle.capacity ||
+                            selectedVehicle.passenger_capacity,
+                        ],
                       ].map(([label, value]) => (
                         <Flex key={label} justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">{label}</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            {label}
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {value || "Not recorded"}
                           </Text>
                         </Flex>
@@ -807,17 +851,33 @@ const Vehicles = () => {
                     </VStack>
                   </CardBody>
                 </Card>
-                <Card borderRadius="xl" border="1px solid" borderColor="gray.200">
+                <Card
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                >
                   <CardBody>
-                    <Heading size="xs" color="gray.500" textTransform="uppercase" mb={3}>
+                    <Heading
+                      size="xs"
+                      color="gray.500"
+                      textTransform="uppercase"
+                      mb={3}
+                    >
                       Ownership & assignment
                     </Heading>
                     <VStack align="stretch" spacing={2}>
                       <Flex justify="space-between" gap={4}>
                         <Text color="gray.500" fontSize="sm">
-                          {getVehicleScope(selectedVehicle) === "school" ? "School" : "Fleet owner"}
+                          {getVehicleScope(selectedVehicle) === "school"
+                            ? "School"
+                            : "Fleet owner"}
                         </Text>
-                        <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                        <Text
+                          color="gray.800"
+                          fontSize="sm"
+                          fontWeight="600"
+                          textAlign="right"
+                        >
                           {getVehicleScope(selectedVehicle) === "school"
                             ? selectedVehicle.school?.name || "Not linked"
                             : selectedVehicle.owner?.company_name ||
@@ -826,8 +886,15 @@ const Vehicles = () => {
                         </Text>
                       </Flex>
                       <Flex justify="space-between" gap={4}>
-                        <Text color="gray.500" fontSize="sm">Assigned driver</Text>
-                        <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                        <Text color="gray.500" fontSize="sm">
+                          Assigned driver
+                        </Text>
+                        <Text
+                          color="gray.800"
+                          fontSize="sm"
+                          fontWeight="600"
+                          textAlign="right"
+                        >
                           {selectedVehicle.driver?.users?.name ||
                             selectedVehicle.driver?.name ||
                             "Not assigned"}
@@ -836,18 +903,32 @@ const Vehicles = () => {
                       {selectedVehicle.driver?.job_title ||
                       selectedVehicle.driver?.role ? (
                         <Flex justify="space-between" gap={4}>
-                            <Text color="gray.500" fontSize="sm">Driver role</Text>
-                            <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
-                              {selectedVehicle.driver.job_title ||
-                                selectedVehicle.driver.role}
-                            </Text>
+                          <Text color="gray.500" fontSize="sm">
+                            Driver role
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
+                            {selectedVehicle.driver.job_title ||
+                              selectedVehicle.driver.role}
+                          </Text>
                         </Flex>
                       ) : null}
                       <Flex justify="space-between" gap={4}>
                         <Text color="gray.500" fontSize="sm">
-                          {getVehicleScope(selectedVehicle) === "school" ? "Assigned trip" : "Assigned route"}
+                          {getVehicleScope(selectedVehicle) === "school"
+                            ? "Assigned trip"
+                            : "Assigned route"}
                         </Text>
-                        <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                        <Text
+                          color="gray.800"
+                          fontSize="sm"
+                          fontWeight="600"
+                          textAlign="right"
+                        >
                           {selectedVehicle.route?.route_name ||
                             selectedVehicle.trip?.name ||
                             "Not assigned"}
@@ -856,58 +937,109 @@ const Vehicles = () => {
                       {selectedVehicle.route?.start_location ||
                       selectedVehicle.route?.end_location ? (
                         <Flex justify="space-between" gap={4}>
-                            <Text color="gray.500" fontSize="sm">Route</Text>
-                            <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
-                              {selectedVehicle.route.start_location || "Start unavailable"}
-                              {" → "}
-                              {selectedVehicle.route.end_location || "End unavailable"}
-                            </Text>
+                          <Text color="gray.500" fontSize="sm">
+                            Route
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
+                            {selectedVehicle.route.start_location ||
+                              "Start unavailable"}
+                            {" → "}
+                            {selectedVehicle.route.end_location ||
+                              "End unavailable"}
+                          </Text>
                         </Flex>
                       ) : null}
                       {selectedVehicle.trip?.destination ? (
                         <Flex justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">Destination</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            Destination
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {selectedVehicle.trip.destination}
                           </Text>
                         </Flex>
                       ) : null}
                       {selectedVehicle.trip?.status ? (
                         <Flex justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">Trip status</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            Trip status
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {selectedVehicle.trip.status.replaceAll("_", " ")}
                           </Text>
                         </Flex>
                       ) : null}
                       {selectedVehicle.trip?.departure_at ? (
                         <Flex justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">Departure</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            Departure
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {formatDateTime(selectedVehicle.trip.departure_at)}
                           </Text>
                         </Flex>
                       ) : null}
                       {selectedVehicle.trip?.return_at ? (
                         <Flex justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">Return</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            Return
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {formatDateTime(selectedVehicle.trip.return_at)}
                           </Text>
                         </Flex>
                       ) : null}
                       {selectedVehicle.assignment?.coordinator ? (
                         <Flex justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">Trip coordinator</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            Trip coordinator
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {selectedVehicle.assignment.coordinator.name ||
                               "Not assigned"}
                           </Text>
                         </Flex>
                       ) : null}
                       <Flex justify="space-between" gap={4}>
-                        <Text color="gray.500" fontSize="sm">Assigned students</Text>
-                        <Text color="gray.800" fontSize="sm" fontWeight="700" textAlign="right">
+                        <Text color="gray.500" fontSize="sm">
+                          Assigned students
+                        </Text>
+                        <Text
+                          color="gray.800"
+                          fontSize="sm"
+                          fontWeight="700"
+                          textAlign="right"
+                        >
                           {selectedVehicle.studentCount || 0}
                           {selectedVehicle.capacity
                             ? ` / ${selectedVehicle.capacity}`
@@ -916,10 +1048,19 @@ const Vehicles = () => {
                       </Flex>
                       {selectedVehicle.trackingSession ? (
                         <Flex justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">Tracking</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            Tracking
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {selectedVehicle.trackingSession.status} ·{" "}
-                            {formatDateTime(selectedVehicle.trackingSession.started_at)}
+                            {formatDateTime(
+                              selectedVehicle.trackingSession.started_at,
+                            )}
                           </Text>
                         </Flex>
                       ) : null}
@@ -934,7 +1075,12 @@ const Vehicles = () => {
                     borderColor="gray.200"
                   >
                     <CardBody>
-                      <Heading size="xs" color="gray.500" textTransform="uppercase" mb={3}>
+                      <Heading
+                        size="xs"
+                        color="gray.500"
+                        textTransform="uppercase"
+                        mb={3}
+                      >
                         School trip assignments
                       </Heading>
                       <VStack align="stretch" spacing={3}>
@@ -947,13 +1093,22 @@ const Vehicles = () => {
                             borderColor="gray.100"
                             borderRadius="lg"
                           >
-                            <Flex justify="space-between" align="flex-start" gap={3}>
+                            <Flex
+                              justify="space-between"
+                              align="flex-start"
+                              gap={3}
+                            >
                               <Box>
-                                <Text color="gray.800" fontSize="sm" fontWeight="700">
+                                <Text
+                                  color="gray.800"
+                                  fontSize="sm"
+                                  fontWeight="700"
+                                >
                                   {assignment.trip?.name || "School trip"}
                                 </Text>
                                 <Text color="gray.500" fontSize="xs" mt={1}>
-                                  {assignment.trip?.destination || "Destination not set"}
+                                  {assignment.trip?.destination ||
+                                    "Destination not set"}
                                   {assignment.trip?.status
                                     ? ` · ${assignment.trip.status.replaceAll("_", " ")}`
                                     : ""}
@@ -961,11 +1116,14 @@ const Vehicles = () => {
                               </Box>
                               <Badge colorScheme="blue">
                                 {assignment.studentCount}{" "}
-                                {assignment.studentCount === 1 ? "student" : "students"}
+                                {assignment.studentCount === 1
+                                  ? "student"
+                                  : "students"}
                               </Badge>
                             </Flex>
                             <Text color="gray.600" fontSize="xs" mt={2}>
-                              Driver: {assignment.driver?.name || "Not assigned"}
+                              Driver:{" "}
+                              {assignment.driver?.name || "Not assigned"}
                               {assignment.trip?.departure_at
                                 ? ` · Departs ${formatDateTime(assignment.trip.departure_at)}`
                                 : ""}
@@ -976,22 +1134,41 @@ const Vehicles = () => {
                     </CardBody>
                   </Card>
                 ) : null}
-                <Card borderRadius="xl" border="1px solid" borderColor="gray.200">
+                <Card
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                >
                   <CardBody>
-                    <Heading size="xs" color="gray.500" textTransform="uppercase" mb={3}>
+                    <Heading
+                      size="xs"
+                      color="gray.500"
+                      textTransform="uppercase"
+                      mb={3}
+                    >
                       Compliance dates
                     </Heading>
                     <VStack align="stretch" spacing={2}>
                       {[
                         ["License expiry", selectedVehicle.license_expiry],
-                        ["Roadworthy expiry", selectedVehicle.roadworthy_expiry],
+                        [
+                          "Roadworthy expiry",
+                          selectedVehicle.roadworthy_expiry,
+                        ],
                         ["Insurance expiry", selectedVehicle.insurance_expiry],
                         ["Added", selectedVehicle.created_at],
                         ["Last updated", selectedVehicle.updated_at],
                       ].map(([label, value]) => (
                         <Flex key={label} justify="space-between" gap={4}>
-                          <Text color="gray.500" fontSize="sm">{label}</Text>
-                          <Text color="gray.800" fontSize="sm" fontWeight="600" textAlign="right">
+                          <Text color="gray.500" fontSize="sm">
+                            {label}
+                          </Text>
+                          <Text
+                            color="gray.800"
+                            fontSize="sm"
+                            fontWeight="600"
+                            textAlign="right"
+                          >
                             {value ? formatDateTime(value) : "Not recorded"}
                           </Text>
                         </Flex>
@@ -999,9 +1176,18 @@ const Vehicles = () => {
                     </VStack>
                   </CardBody>
                 </Card>
-                <Card borderRadius="xl" border="1px solid" borderColor="gray.200">
+                <Card
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                >
                   <CardBody>
-                    <Heading size="xs" color="gray.500" textTransform="uppercase" mb={3}>
+                    <Heading
+                      size="xs"
+                      color="gray.500"
+                      textTransform="uppercase"
+                      mb={3}
+                    >
                       Live information
                     </Heading>
                     <VStack align="stretch" spacing={2}>
@@ -1017,13 +1203,23 @@ const Vehicles = () => {
                           <Text color="gray.700" fontSize="sm">
                             {selectedVehicle.location.latitude},{" "}
                             {selectedVehicle.location.longitude}
-                            <Text as="span" display="block" color="gray.500" fontSize="xs">
-                              Updated {formatDateTime(selectedVehicle.location.recorded_at)}
+                            <Text
+                              as="span"
+                              display="block"
+                              color="gray.500"
+                              fontSize="xs"
+                            >
+                              Updated{" "}
+                              {formatDateTime(
+                                selectedVehicle.location.recorded_at,
+                              )}
                             </Text>
                           </Text>
                         </HStack>
                       ) : (
-                        <Text color="gray.500" fontSize="sm">No live location available.</Text>
+                        <Text color="gray.500" fontSize="sm">
+                          No live location available.
+                        </Text>
                       )}
                     </VStack>
                   </CardBody>
@@ -1044,7 +1240,10 @@ const Vehicles = () => {
                       Vehicle images
                     </Heading>
                     {selectedVehiclePhotos.length ? (
-                      <SimpleGrid columns={{ base: 1, sm: 2, lg: 3 }} spacing={3}>
+                      <SimpleGrid
+                        columns={{ base: 1, sm: 2, lg: 3 }}
+                        spacing={3}
+                      >
                         {selectedVehiclePhotos.map(({ url, name }, index) => (
                           <a
                             key={`${url}-${index}`}
@@ -1062,7 +1261,12 @@ const Vehicles = () => {
                               borderRadius="lg"
                               bg="gray.100"
                             />
-                            <Text fontSize="xs" color="gray.600" mt={1} noOfLines={1}>
+                            <Text
+                              fontSize="xs"
+                              color="gray.600"
+                              mt={1}
+                              noOfLines={1}
+                            >
                               {name}
                             </Text>
                           </a>
@@ -1092,29 +1296,31 @@ const Vehicles = () => {
                     </Heading>
                     {selectedVehicleDocuments.length ? (
                       <VStack align="stretch" spacing={2}>
-                        {selectedVehicleDocuments.map(({ url, name }, index) => (
-                          <HStack
-                            key={`${url}-${index}`}
-                            border="1px solid"
-                            borderColor="gray.100"
-                            borderRadius="md"
-                            p={3}
-                          >
-                            <Icon as={FiFileText} color="blue.500" />
-                            <Text
-                              as="a"
-                              href={url}
-                              target="_blank"
-                              rel="noreferrer"
-                              color="blue.600"
-                              fontSize="sm"
-                              fontWeight="600"
-                              wordBreak="break-word"
+                        {selectedVehicleDocuments.map(
+                          ({ url, name }, index) => (
+                            <HStack
+                              key={`${url}-${index}`}
+                              border="1px solid"
+                              borderColor="gray.100"
+                              borderRadius="md"
+                              p={3}
                             >
-                              {name}
-                            </Text>
-                          </HStack>
-                        ))}
+                              <Icon as={FiFileText} color="blue.500" />
+                              <Text
+                                as="a"
+                                href={url}
+                                target="_blank"
+                                rel="noreferrer"
+                                color="blue.600"
+                                fontSize="sm"
+                                fontWeight="600"
+                                wordBreak="break-word"
+                              >
+                                {name}
+                              </Text>
+                            </HStack>
+                          ),
+                        )}
                       </VStack>
                     ) : (
                       <Text fontSize="sm" color="gray.500">
@@ -1125,8 +1331,15 @@ const Vehicles = () => {
                 </Card>
               </SimpleGrid>
             </ModalBody>
-            <ModalFooter bg="white" borderTop="1px solid" borderColor="gray.100">
-              <Button onClick={() => setSelectedVehicle(null)} colorScheme="blue">
+            <ModalFooter
+              bg="white"
+              borderTop="1px solid"
+              borderColor="gray.100"
+            >
+              <Button
+                onClick={() => setSelectedVehicle(null)}
+                colorScheme="blue"
+              >
                 Close details
               </Button>
             </ModalFooter>

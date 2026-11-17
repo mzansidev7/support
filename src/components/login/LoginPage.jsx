@@ -127,10 +127,9 @@ const LoginPage = () => {
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                         />
-                        <div
-                            style={{ position: "relative", marginTop: "15px" }}
-                        >
+                        <div className="passwordBox" style={{ marginTop: "15px" }}>
                             <input
+                                id="support-login-password"
                                 name="password"
                                 type={showPassword ? "text" : "password"}
                                 placeholder="Enter your password"
@@ -138,22 +137,19 @@ const LoginPage = () => {
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                             />
-                            <span
+                            <button
+                                type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                style={{
-                                    position: "absolute",
-                                    right: 10,
-                                    top: "50%",
-                                    transform: "translateY(-50%)",
-                                    cursor: "pointer"
-                                }}
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                                aria-pressed={showPassword}
+                                aria-controls="support-login-password"
                             >
                                 {showPassword ? (
                                     <EyeOff size={18} />
                                 ) : (
                                     <Eye size={18} />
                                 )}
-                            </span>
+                            </button>
                         </div>
 
                         <button

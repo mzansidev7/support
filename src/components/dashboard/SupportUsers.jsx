@@ -44,7 +44,7 @@ import {
   FiRefreshCw,
   FiShield,
 } from "react-icons/fi";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
 import {
   getCurrentUserIds,
@@ -244,7 +244,7 @@ const SupportUsers = () => {
 
   return (
     <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
-      <PageHeader
+      <SupportPageHeader
         eyebrow="PLATFORM ACCESS"
         title="Support users"
         description="Manage platform administrators who can access the support console."

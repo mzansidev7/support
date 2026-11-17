@@ -40,7 +40,7 @@ import {
 } from "react-icons/fi";
 import "../../styles/Profile.css";
 import { API_URL } from "../../Urls";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 
 const apiRequest = async (path, options = {}) => {
   const token = localStorage.getItem("token");
@@ -270,8 +270,8 @@ const Profile = () => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
   return (
-    <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
-      <PageHeader
+    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 5 }}>
+      <SupportPageHeader
         eyebrow="ACCOUNT"
         title="My Profile"
         description="Manage your support account information and security."

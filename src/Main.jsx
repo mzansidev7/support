@@ -14,6 +14,7 @@ import Users from "./components/dashboard/Users";
 import MessagesInbox from "./components/dashboard/MessagesInbox";
 import Payments from "./components/dashboard/Payments";
 import SupportUsers from "./components/dashboard/SupportUsers";
+import GovernmentUsers from "./components/dashboard/GovernmentUsers";
 import Notifications from "./components/dashboard/Notifications";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import { PresenceProvider } from "./presence/PresenceProvider";
@@ -106,6 +107,19 @@ const Main = () => {
                             onClose={onClose}
                         >
                             <SupportUsers />
+                        </DashboardLayout>
+                    }
+                />
+
+                <Route
+                    path="/government-users"
+                    element={
+                        <DashboardLayout
+                            isOpen={isOpen}
+                            onOpen={onOpen}
+                            onClose={onClose}
+                        >
+                            <GovernmentUsers />
                         </DashboardLayout>
                     }
                 />

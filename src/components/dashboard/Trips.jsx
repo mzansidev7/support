@@ -38,7 +38,7 @@ import {
 } from "react-icons/fi";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import { API_URL } from "../../Urls";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 import { getServiceDateKey, isAllowedHistoryDate } from "./tripHistoryUtils";
 import {
   getFilteredUpcomingTripGroups,
@@ -371,10 +371,9 @@ const Trips = () => {
     return matchesSearch && matchesFilter;
   });
 
-
   return (
-    <Box minH="100vh" bg="gray.50" p={{ base: 4, md: 6, xl: 8 }}>
-      <PageHeader
+    <Box p={{ base: 4, md: 5 }} bg="gray.50">
+      <SupportPageHeader
         eyebrow="PLATFORM OPERATIONS"
         title="Trips Monitoring"
         description="Monitor fleet routes and school trips across the platform."
@@ -705,12 +704,7 @@ const Trips = () => {
               <VStack align="stretch" spacing={6}>
                 {upcomingTripGroups.map((group) => (
                   <Box key={group.routeName}>
-                    <Flex
-                      mb={3}
-                      align="center"
-                      justify="space-between"
-                      gap={3}
-                    >
+                    <Flex mb={3} align="center" justify="space-between" gap={3}>
                       <Heading size="sm" color="gray.800">
                         {group.routeName}
                       </Heading>
@@ -739,11 +733,7 @@ const Trips = () => {
                                 mb={4}
                               >
                                 <Box minW={0}>
-                                  <Text
-                                    mt={1}
-                                    color="gray.500"
-                                    fontSize="xs"
-                                  >
+                                  <Text mt={1} color="gray.500" fontSize="xs">
                                     {isSchoolTrip
                                       ? trip.school?.name || "School trip"
                                       : "Student route"}

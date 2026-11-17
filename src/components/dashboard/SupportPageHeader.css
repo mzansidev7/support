@@ -1,0 +1,116 @@
+.support-page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  margin: 4px 0 24px;
+  padding: 4px 2px 0;
+}
+
+.support-page-heading-copy {
+  position: relative;
+  min-width: 0;
+  padding-left: 16px;
+}
+
+.support-page-heading-copy::before {
+  position: absolute;
+  inset: 3px auto 3px 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #2b6cb0;
+  content: "";
+}
+
+.support-page-heading .support-page-heading-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.support-page-heading h1 {
+  margin: 0 0 5px;
+  color: #1a202c;
+  font-size: 30px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.support-page-heading h2 {
+  margin: 0 0 5px;
+  color: #1a202c;
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.support-page-heading-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border: 1px solid #bee3f8;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #ebf8ff, #d9efff);
+  color: #2b6cb0;
+  font-size: 19px;
+  box-shadow: 0 4px 12px rgb(43 108 176 / 9%);
+}
+
+.support-page-heading-icon svg {
+  display: block;
+}
+
+.support-page-heading-kicker {
+  margin: 0 0 6px;
+  color: #2b6cb0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+}
+
+.support-page-heading-copy > p:not(.support-page-heading-kicker) {
+  margin: 0;
+  color: #718096;
+  font-size: 13px;
+}
+
+.support-page-heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.support-page-heading-actions > button {
+  box-sizing: border-box;
+  min-width: 92px;
+  min-height: 35px;
+  height: 35px;
+  justify-content: center;
+  padding: 0 13px;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .support-page-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .support-page-heading-actions {
+    justify-content: flex-start;
+  }
+
+  .support-page-heading h1 {
+    font-size: 26px;
+  }
+}

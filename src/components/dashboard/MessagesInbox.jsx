@@ -52,7 +52,7 @@ import {
   FiSquare,
   FiX,
 } from "react-icons/fi";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 import { readMessageCache, writeMessageCache } from "./messageCache";
 import useMessagesInboxState from "../../hooks/useMessagesInboxState";
 import "../../styles/MessagesInbox.css";
@@ -1805,7 +1805,7 @@ const MessagesInbox = () => {
       bg="gray.50"
       borderColor="gray.200"
     >
-      <PageHeader
+      <SupportPageHeader
         eyebrow="MESSAGING"
         title="Conversations"
         description="Review support conversations and reply to users."

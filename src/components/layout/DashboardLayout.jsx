@@ -1,7 +1,7 @@
 import React from 'react';
-import { Flex, Box, HStack, Heading, Icon } from "@chakra-ui/react";
-import { FiMenu } from "react-icons/fi";
+import { Flex, Box } from "@chakra-ui/react";
 import Sidebar from "../../subComponents/Sidebar";
+import PortalHeader from "./PortalHeader";
 
 const DashboardLayout = ({ children, isOpen, onOpen, onClose }) => {
   return (
@@ -11,31 +11,8 @@ const DashboardLayout = ({ children, isOpen, onOpen, onClose }) => {
       <Sidebar isOpen={isOpen} onClose={onClose} />
 
       {/* MAIN */}
-      <Box flex="1">
-
-        {/* 🔥 GLOBAL TOPBAR (THIS FIXES EVERYTHING) */}
-        <Box
-          display={{ base: "block", md: "none" }}
-          bg="white"
-          px={4}
-          py={3}
-          boxShadow="sm"
-        >
-          <HStack justify="space-between">
-
-            <Heading size="sm">🚍 Track My Kid</Heading>
-
-            <Icon
-              as={FiMenu}
-              boxSize={6}
-              cursor="pointer"
-              onClick={onOpen}
-            />
-
-          </HStack>
-        </Box>
-
-        {/* PAGE CONTENT */}
+      <Box flex="1" minW={0}>
+        <PortalHeader onOpen={onOpen} />
         <Box>
           {children}
         </Box>

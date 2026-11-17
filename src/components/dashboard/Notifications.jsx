@@ -36,7 +36,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { supabaseClient } from "../../supabaseClient/supabase.config";
 import { API_URL } from "../../Urls";
-import PageHeader from "./PageHeader";
+import SupportPageHeader from "./SupportPageHeader";
 
 const PAGE_SIZE = 50;
 const DISPLAY_PAGE_SIZE = 14;
@@ -339,7 +339,7 @@ const Notifications = () => {
 
   return (
     <Box p={{ base: 4, md: 5 }} bg="gray.50" borderColor="gray.200">
-      <PageHeader
+      <SupportPageHeader
         eyebrow="SUPPORT WORKSPACE"
         title="Notifications"
         description="Review incident, ticket, and support alerts assigned to your account."
